@@ -5,3 +5,35 @@ data/
 .env*
 
 .npm-cache/
+
+# Local databases and database sidecars
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+
+# Generated reports, caches and temporary files
+coverage/
+.vite/
+.cache/
+tmp/
+temp/
+*.tmp
+*.part
+*.tsbuildinfo
+test-results/
+playwright-report/
+.DS_Store
+Thumbs.db
+
+# Local credentials
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
