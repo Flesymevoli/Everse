@@ -77,6 +77,8 @@ export function createApp(store: Store) {
       body.budget,
       body.reserve,
     );
+    // Recheck after the asynchronous body read before acquiring the turn.
+    if (busy.has(id)) return c.json({ error: "该存档正在生成" }, 409);
     busy.add(id);
     c.header("Content-Type", "application/x-ndjson");
     return stream(c, async (s) => {
