@@ -9,12 +9,16 @@ export async function* generate(
   config: Config,
   messages: Message[],
   maxTokens: number,
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   if (config.mock) {
     for (const part of ["【模拟回复】", "远处的灯亮了。", "你想走近看看吗？"]) {
       await new Promise((r) => setTimeout(r, 40));
+      signal?.throwIfAborted();
       yield part;
     }
+    if (messages.some((m) => m.content.includes("<action_suggestions>")))
+      yield '\n<action_suggestions>["走近灯光，看看是谁在等候","留在原地，听一听海风里的声音"]</action_suggestions>';
     return;
   }
   const url = new URL(config.baseUrl.replace(/\/$/, "") + "/chat/completions");
@@ -27,7 +31,10 @@ export async function* generate(
   const response = await fetch(url, {
     method: "POST",
     redirect: "error",
-    signal: AbortSignal.timeout(90000),
+    signal: AbortSignal.any([
+      AbortSignal.timeout(90000),
+      ...(signal ? [signal] : []),
+    ]),
     headers: {
       "Content-Type": "application/json",
       ...(config.apiKey ? { Authorization: "Bearer " + config.apiKey } : {}),

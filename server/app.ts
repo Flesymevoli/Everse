@@ -4,6 +4,7 @@ import { stream } from "hono/streaming";
 import { z } from "zod";
 import { importCard, expand } from "./cards.js";
 import { buildContext } from "./context.js";
+import { parseSuggestions, suggestionInstruction } from "./suggestions.js";
 import { generate } from "./provider.js";
 import type { Store } from "./store.js";
 const turn = z.object({
@@ -20,6 +21,7 @@ const turn = z.object({
 export function createApp(store: Store) {
   const app = new Hono();
   const busy = new Set<string>();
+  const controllers = new Map<string, AbortController>();
   app.use("*", bodyLimit({ maxSize: 2 * 1024 * 1024 }));
   app.use("*", async (c, next) => {
     const origin = c.req.header("origin");
@@ -63,6 +65,19 @@ export function createApp(store: Store) {
     });
   });
   app.get("/api/sessions/:id", (c) => c.json(store.session(c.req.param("id"))));
+  app.post("/api/sessions/:id/preferences", async (c) => {
+    const id = c.req.param("id");
+    const { suggestions } = z
+      .object({ suggestions: z.boolean() })
+      .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请在生成结束后修改设置" }, 409);
+    store.setSuggestions(id, suggestions);
+    return c.json({ suggestions });
+  });
+  app.post("/api/sessions/:id/stop", (c) => {
+    controllers.get(c.req.param("id"))?.abort();
+    return c.json({ stopped: true });
+  });
   app.post("/api/sessions/:id/turn", async (c) => {
     const id = c.req.param("id");
     if (busy.has(id)) return c.json({ error: "该存档正在生成" }, 409);
@@ -70,8 +85,22 @@ export function createApp(store: Store) {
     const session = store.session(id);
     const item = store.cards().find((x) => x.id === session.cardId);
     if (!item) throw new Error("作品不存在");
+    const runtimeCard = session.suggestions
+      ? {
+          ...item.card,
+          data: {
+            ...item.card.data,
+            post_history_instructions: [
+              item.card.data.post_history_instructions,
+              suggestionInstruction,
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+          },
+        }
+      : item.card;
     const prompt = buildContext(
-      item.card,
+      runtimeCard,
       session.messages,
       body.input,
       body.budget,
@@ -80,8 +109,11 @@ export function createApp(store: Store) {
     // Recheck after the asynchronous body read before acquiring the turn.
     if (busy.has(id)) return c.json({ error: "该存档正在生成" }, 409);
     busy.add(id);
+    const controller = new AbortController();
+    controllers.set(id, controller);
     c.header("Content-Type", "application/x-ndjson");
     return stream(c, async (s) => {
+      s.onAbort(() => controller.abort());
       try {
         await s.write(JSON.stringify({ type: "prompt", prompt }) + "\n");
         let reply = "";
@@ -89,16 +121,26 @@ export function createApp(store: Store) {
           body.config,
           prompt.messages,
           body.reserve,
+          controller.signal,
         )) {
           reply += text;
           if (reply.length > 100000) throw new Error("回复过长");
           await s.write(JSON.stringify({ type: "delta", text }) + "\n");
         }
         if (!reply.trim()) throw new Error("模型返回空回复");
+        controller.signal.throwIfAborted();
+        const parsed = session.suggestions
+          ? parseSuggestions(reply)
+          : { text: reply, suggestions: [] };
         store.save(id, [
           ...session.messages,
           { role: "user", content: body.input },
-          { role: "assistant", content: reply },
+          {
+            role: "assistant",
+            content: parsed.text,
+            suggestions: parsed.suggestions,
+            raw: reply,
+          },
         ]);
         await s.write(JSON.stringify({ type: "done" }) + "\n");
       } catch {
@@ -111,6 +153,7 @@ export function createApp(store: Store) {
         );
       } finally {
         busy.delete(id);
+        controllers.delete(id);
       }
     });
   });

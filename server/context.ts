@@ -2,6 +2,8 @@ import { expand, type Card } from "./cards.js";
 export interface Message {
   role: "system" | "user" | "assistant";
   content: string;
+  suggestions?: string[];
+  raw?: string;
 }
 export function buildContext(
   card: Card,
@@ -41,7 +43,7 @@ export function buildContext(
       content: expand(data.post_history_instructions, data.name),
     });
   const recent = history.map((m) => ({
-    ...m,
+    role: m.role,
     content: expand(m.content, data.name),
   }));
   const estimate = (messages: Message[]) =>

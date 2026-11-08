@@ -7,7 +7,7 @@ export class Store {
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     this.db.exec(
-      "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS cards(id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, cardId TEXT NOT NULL, messages TEXT NOT NULL);",
+      "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS preferences(id TEXT PRIMARY KEY, suggestions INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS cards(id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, cardId TEXT NOT NULL, messages TEXT NOT NULL);",
     );
   }
   cards() {
@@ -35,6 +35,11 @@ export class Store {
     return {
       id: String(r.id),
       cardId: String(r.cardId),
+      suggestions: Boolean(
+        this.db
+          .prepare("SELECT suggestions FROM preferences WHERE id=?")
+          .get(id)?.suggestions,
+      ),
       messages: JSON.parse(String(r.messages)) as Message[],
     };
   }
@@ -49,6 +54,14 @@ export class Store {
     this.db
       .prepare("UPDATE sessions SET messages=? WHERE id=?")
       .run(JSON.stringify(messages), id);
+  }
+  setSuggestions(id: string, enabled: boolean) {
+    this.session(id);
+    this.db
+      .prepare(
+        "INSERT INTO preferences VALUES (?,?) ON CONFLICT(id) DO UPDATE SET suggestions=excluded.suggestions",
+      )
+      .run(id, Number(enabled));
   }
   close() {
     this.db.close();
