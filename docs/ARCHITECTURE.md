@@ -33,6 +33,10 @@ src/connections.ts 校验恢复的连接元信息、按选中 ID 构建现有 Co
 
 secrets.ts 通过 Windows PowerShell/.NET CurrentUser DPAPI 加解密，数据经标准输入而非命令行传递；不输出子进程错误详情。connection-vault.ts 管理 connections 表，只返回元信息；生成时凭 connectionId 读取可信地址与解密 Key，不接受客户端覆盖保存连接的地址。敏感写接口要求 JSON，所有请求限制 Host 和 Origin。无明文回退；其他平台暂不支持保存 Key。
 
-worlds.ts 定义 yuno_world_v1，assets 表以 worlds 类型保存规范化运行数据与原始 JSON。独立 ST 世界书可包装为世界卡；世界卡并不是 ST 新格式承诺。sessions 原 cardId 保留；纯世界会话使用空 cardId，session_options.worldId 指向世界。世界设定以独立系统消息进入上下文，世界书与手动绑定书各自求值（尚不跨书递归）。世界开场优先于角色开场。
+worlds.ts 定义 yuno_world_v1，assets 表以 worlds 类型保存规范化运行数据与原始 JSON。独立 ST 世界书可包装为世界书；世界书并不是 ST 新格式承诺。sessions 原 cardId 保留；纯世界会话使用空 cardId，session_options.worldId 指向世界。世界设定以独立系统消息进入上下文，世界书与手动绑定书各自求值（尚不跨书递归）。世界开场优先于角色开场。
 
 Library.tsx 负责世界/角色分类、新建、导入、角色编辑和开局选择。角色编辑只合并允许修改字段，保留原始高级字段，并在 card_revisions 事务备份；不修改聊天原文。旧记录不强制转换。项目包名改为 yunotavern，数据目录和 Git 远程地址保持不变。
+
+## 世界书编辑
+
+界面统一使用“世界书”；为避免迁移旧存档，内部 worlds、worldId、yuno_world_v1 保持兼容。world-edit.ts 合并世界书元信息及编辑后的条目，未知字段保留；ST 原生 entries 导出形状不变，应用元信息写入 _yunotavern 并在重导入时恢复。BookEntryFields.tsx 共用于作品库和独立世界书管理区。assets 更新及 asset_revisions 备份在同一事务中，不更新 sessions。生成接口每轮重读资源，相关会话 busy 时拒绝资源编辑。

@@ -73,4 +73,8 @@
 
 ## YunoTavern 双卡与本地连接增量
 
-角色卡基础字段已支持新建/编辑（name/description/personality/scenario/first_mes），其他原始字段保留；并非完整角色编辑器。世界卡 yuno_world_v1 是应用自身资源，支持包装独立 ST 世界书导入，不是 ST 原生分类；ST 场景角色卡仍走角色卡入口。双卡存档与 Windows DPAPI 连接保存属于应用能力，不计入原生 ST 兼容进度。世界书跨书递归、世界卡专用预设 marker 尚未实现。tests/vault-worlds.test.ts 验证两类设定进入实际上下文、数据库重开、角色编辑和原文不变。
+角色卡基础字段已支持新建/编辑（name/description/personality/scenario/first_mes），其他原始字段保留；并非完整角色编辑器。世界书 yuno_world_v1 是应用自身资源，支持包装独立 ST 世界书导入，不是 ST 原生分类；ST 场景角色卡仍走角色卡入口。双卡存档与 Windows DPAPI 连接保存属于应用能力，不计入原生 ST 兼容进度。世界书跨书递归、世界书专用预设 marker 尚未实现。tests/vault-worlds.test.ts 验证两类设定进入实际上下文、数据库重开、角色编辑和原文不变。
+
+## 世界书编辑进展
+
+作品库和独立世界书管理区均可编辑基础条目 key/content/constant/disable、新增及移除；顺序、概率、递归、位置等原字段保留，尚无对应高级编辑控件。应用世界设定/开场并非 ST 标准字段，以 _yunotavern 元信息随 ST 世界书导出。世界书编辑不改写存档；tests/world-edit.test.ts 验证下一轮上下文、旧存档/分支不变、原字段往返、重启恢复、无效输入回滚及生成期间编辑拦截。构建与 29 项模拟/系统测试通过，未使用付费模型。

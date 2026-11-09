@@ -1,7 +1,13 @@
+import { BookEntryFields, type BookDraft } from "./BookEntryFields";
 import { useEffect, useState } from "react";
 import type { SessionOptions } from "../server/settings";
 import type { Message } from "../server/context";
-type Asset = { id: string; name: string; warnings: string[] };
+type Asset = {
+  id: string;
+  name: string;
+  warnings: string[];
+  original: unknown;
+};
 async function request<T>(path: string, value?: unknown): Promise<T> {
   const response = await fetch(
     "/api/" + path,
@@ -30,6 +36,11 @@ export function Management({
   disabled: boolean;
   onUpdate: (id: string) => Promise<void>;
 }) {
+  const [editingBook, setEditingBook] = useState<{
+    id: string;
+    name: string;
+    book: BookDraft;
+  } | null>(null);
   const [books, setBooks] = useState<Asset[]>([]),
     [presets, setPresets] = useState<Asset[]>([]);
   const [options, setOptions] = useState<SessionOptions>({});
@@ -111,8 +122,22 @@ export function Management({
               <details key={asset.id}>
                 <summary>{asset.name}</summary>
                 <a href={"/api/" + kind + "/" + asset.id + "/export"}>
-                  导出原始 JSON
+                  导出 JSON
                 </a>
+                {kind === "worldbooks" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingBook({
+                        id: asset.id,
+                        name: asset.name,
+                        book: structuredClone(asset.original) as BookDraft,
+                      })
+                    }
+                  >
+                    编辑世界书
+                  </button>
+                )}
                 <ul>
                   {asset.warnings.map((warning, i) => (
                     <li key={i}>{warning}</li>
@@ -122,6 +147,47 @@ export function Management({
             ))}
           </section>
         ))}
+        {editingBook && (
+          <section aria-label="编辑独立世界书">
+            <h3>编辑世界书</h3>
+            <label>
+              名称
+              <input
+                value={editingBook.name}
+                maxLength={100}
+                onChange={(e) =>
+                  setEditingBook({ ...editingBook, name: e.target.value })
+                }
+              />
+            </label>
+            <BookEntryFields
+              book={editingBook.book}
+              onChange={(book) => setEditingBook({ ...editingBook, book })}
+            />
+            <p className="muted">
+              保存后，所有绑定此书的存档从下一轮使用新设定；已有聊天不变。
+            </p>
+            <button
+              type="button"
+              disabled={!editingBook.name.trim()}
+              onClick={() =>
+                void run(async () => {
+                  await request("worldbooks/" + editingBook.id + "/edit", {
+                    name: editingBook.name,
+                    original: editingBook.book,
+                  });
+                  await refresh();
+                  setEditingBook(null);
+                })
+              }
+            >
+              保存世界书
+            </button>
+            <button type="button" onClick={() => setEditingBook(null)}>
+              取消
+            </button>
+          </section>
+        )}
         <p className="muted">
           独立世界书支持文本关键词、选择逻辑、扫描深度、递归、概率与深度插入。预设暂执行全局相对顺序；高级策略见导入警告。
         </p>

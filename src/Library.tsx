@@ -1,8 +1,14 @@
+import { BookEntryFields, type BookDraft } from "./BookEntryFields";
 import { createPortal } from "react-dom";
 import { useState } from "react";
 import type { Card } from "../server/cards";
 import type { World } from "../server/worlds";
-export type WorldItem = { id: string; world: World; warnings: string[] };
+export type WorldItem = {
+  id: string;
+  world: World;
+  original?: unknown;
+  warnings: string[];
+};
 type Character = { id: string; card: Card; warnings: string[] };
 type Save = {
   id: string;
@@ -28,6 +34,7 @@ export function Library({
   onLoad: (id: string) => void;
   onStart: (cardId: string, worldId: string) => Promise<void>;
 }) {
+  const [book, setBook] = useState<BookDraft>({ entries: {} });
   const [tab, setTab] = useState<"characters" | "worlds">("characters");
   const [dialog, setDialog] = useState<"create" | "edit" | "start" | null>(
     null,
@@ -92,7 +99,7 @@ export function Library({
           aria-pressed={tab === "worlds"}
           onClick={() => setTab("worlds")}
         >
-          世界卡
+          世界书
         </button>
         <button
           disabled={locked}
@@ -106,6 +113,7 @@ export function Library({
         <button
           disabled={locked}
           onClick={() => {
+            setBook({ entries: {} });
             setName("");
             setDescription("");
             setOpening("");
@@ -115,10 +123,10 @@ export function Library({
             setDialog("create");
           }}
         >
-          ＋ 新建{tab === "worlds" ? "世界卡" : "角色卡"}
+          ＋ 新建{tab === "worlds" ? "世界书" : "角色卡"}
         </button>
         <label className="import">
-          导入{tab === "worlds" ? "世界卡" : "角色卡"}
+          导入{tab === "worlds" ? "世界书" : "角色卡"}
           <input
             type="file"
             disabled={locked}
@@ -156,7 +164,7 @@ export function Library({
       )}
       <p className="muted">
         {tab === "worlds"
-          ? "世界设定与开场。支持 Yuno 世界卡 JSON、独立酒馆世界书 JSON。"
+          ? "世界设定与开场。支持 Yuno 世界书 JSON、独立酒馆世界书 JSON。"
           : "人物设定与开场。支持酒馆 V2/V3 JSON、PNG。"}
       </p>
       {tab === "characters"
@@ -205,7 +213,35 @@ export function Library({
                 <button disabled={locked} onClick={() => start("", w.id)}>
                   在此世界新建存档
                 </button>
-                <a href={"/api/worlds/" + w.id + "/export"}>导出原始 JSON</a>
+                <button
+                  disabled={locked}
+                  onClick={() => {
+                    setEditingId(w.id);
+                    setName(w.world.data.name);
+                    setDescription(w.world.data.description);
+                    setOpening(w.world.data.first_mes);
+                    const raw = w.original as
+                      Record<string, unknown> | undefined;
+                    const originalBook =
+                      raw && "entries" in raw
+                        ? raw
+                        : (raw?.data as Record<string, unknown> | undefined)
+                            ?.worldbook;
+                    setBook(
+                      structuredClone(
+                        (originalBook ??
+                          w.world.data.worldbook ?? {
+                            entries: {},
+                          }) as BookDraft,
+                      ),
+                    );
+                    setError("");
+                    setDialog("edit");
+                  }}
+                >
+                  编辑世界书
+                </button>
+                <a href={"/api/worlds/" + w.id + "/export"}>导出 JSON</a>
                 {w.warnings.length > 0 && (
                   <details>
                     <summary>兼容提示</summary>
@@ -220,7 +256,7 @@ export function Library({
             </details>
           ))}
       {(tab === "worlds" ? worlds : characters).length === 0 && (
-        <p className="muted">还没有卡片，写几个字也可以开始。</p>
+        <p className="muted">还没有作品，写几个字也可以开始。</p>
       )}
       <button disabled={locked} onClick={() => start()}>
         ＋ 新建存档
@@ -232,7 +268,13 @@ export function Library({
               className="settings"
               role="dialog"
               aria-modal="true"
-              aria-label={dialog === "start" ? "新建存档" : "新建卡片"}
+              aria-label={
+                dialog === "start"
+                  ? "新建存档"
+                  : tab === "worlds"
+                    ? "编辑世界书"
+                    : "编辑角色卡"
+              }
               onKeyDown={(e) => {
                 if (e.key === "Escape" && !locked) setDialog(null);
                 if (e.key === "Tab") {
@@ -265,10 +307,15 @@ export function Library({
                       first_mes: opening,
                       ...(tab === "characters"
                         ? { personality, scenario }
-                        : {}),
+                        : { worldbook: book }),
                     };
                     if (dialog === "edit")
-                      await post("cards/" + editingId + "/edit", data);
+                      await post(
+                        (tab === "worlds" ? "worlds/" : "cards/") +
+                          editingId +
+                          "/edit",
+                        data,
+                      );
                     else if (tab === "worlds")
                       await post("worlds", {
                         original: { spec: "yuno_world_v1", data },
@@ -289,22 +336,24 @@ export function Library({
                 {dialog === "start"
                   ? "选择故事的世界与角色"
                   : dialog === "edit"
-                    ? "编辑角色卡"
+                    ? tab === "worlds"
+                      ? "编辑世界书"
+                      : "编辑角色卡"
                     : tab === "worlds"
-                      ? "新建世界卡"
+                      ? "新建世界书"
                       : "新建角色卡"}
               </h2>
               <fieldset disabled={locked}>
                 {dialog === "start" ? (
                   <>
                     <label>
-                      世界卡
+                      世界书
                       <select
                         autoFocus
                         value={worldId}
                         onChange={(e) => setWorldId(e.target.value)}
                       >
-                        <option value="">不选择世界卡</option>
+                        <option value="">不选择世界书</option>
                         {worlds.map((w) => (
                           <option key={w.id} value={w.id}>
                             {w.world.data.name}
@@ -327,7 +376,7 @@ export function Library({
                       </select>
                     </label>
                     <p className="muted">
-                      至少选择一张卡。世界卡的开场优先，未填写时使用角色开场；不会自动扩写设定。
+                      至少选择一本世界书或一张角色卡。世界书的开场优先，未填写时使用角色开场；不会自动扩写设定。
                     </p>
                   </>
                 ) : (
@@ -351,6 +400,9 @@ export function Library({
                         placeholder="可以只有一句话，也可以留空"
                       />
                     </label>
+                    {tab === "worlds" && (
+                      <BookEntryFields book={book} onChange={setBook} />
+                    )}
                     {tab === "characters" && (
                       <>
                         <label>
@@ -398,7 +450,11 @@ export function Library({
                     dialog === "start" ? !cardId && !worldId : !name.trim()
                   }
                 >
-                  {dialog === "start" ? "开始故事" : "保存卡片"}
+                  {dialog === "start"
+                    ? "开始故事"
+                    : tab === "worlds"
+                      ? "保存世界书"
+                      : "保存角色卡"}
                 </button>
                 <button type="button" onClick={() => setDialog(null)}>
                   取消
