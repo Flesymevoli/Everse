@@ -1,22 +1,24 @@
+import type { Connection } from "./connections";
 import { useRef } from "react";
 
 interface Props {
-  model: string;
-  mock: boolean;
+  profiles: Connection[];
+  selectedId: string | null;
   disabled: boolean;
-  onSelect: (mock: boolean) => void;
+  onSelect: (id: string | null) => void;
   onSettings: () => void;
 }
 
 export function ModelPicker({
-  model,
-  mock,
+  profiles,
+  selectedId,
   disabled,
   onSelect,
   onSettings,
 }: Props) {
   const popup = useRef<HTMLDetailsElement>(null);
-  const configured = model.trim().length > 0 && model !== "your-model-id";
+  const selected = profiles.find((p) => p.id === selectedId);
+  const mock = selectedId === null;
   function close() {
     if (popup.current) popup.current.open = false;
   }
@@ -42,7 +44,7 @@ export function ModelPicker({
         }}
       >
         <span className="model-name">
-          {mock ? "模拟模型" : configured ? model : "选择模型"}
+          {mock ? "模拟模型" : selected?.name || selected?.model || "选择连接"}
         </span>
         <svg
           width="12"
@@ -63,7 +65,7 @@ export function ModelPicker({
           disabled={disabled}
           aria-pressed={mock}
           onClick={() => {
-            onSelect(true);
+            onSelect(null);
             close();
           }}
         >
@@ -72,23 +74,26 @@ export function ModelPicker({
           </span>
           <span aria-hidden="true">{mock ? "✓" : ""}</span>
         </button>
-        {configured && (
+        {profiles.map((profile) => (
           <button
             type="button"
+            key={profile.id}
             disabled={disabled}
-            aria-pressed={!mock}
+            aria-pressed={selectedId === profile.id}
             onClick={() => {
-              onSelect(false);
+              onSelect(profile.id);
               close();
             }}
           >
             <span>
-              {model}
-              <small>使用设置中的 API</small>
+              {profile.name || "未命名连接"}
+              <small>{profile.model || "未填写模型 ID"}</small>
             </span>
-            <span aria-hidden="true">{!mock ? "✓" : ""}</span>
+            <span aria-hidden="true">
+              {selectedId === profile.id ? "✓" : ""}
+            </span>
           </button>
-        )}
+        ))}
         <button
           type="button"
           disabled={disabled}

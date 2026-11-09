@@ -840,3 +840,8 @@ pre {
 .variant-actions { display:flex; align-items:center; gap:.5rem; opacity:.65; margin-block:.5rem; }
 .variant-actions button { padding:.3rem .55rem; font-size:.8rem; }
 .variant-actions:hover, .variant-actions:focus-within { opacity:1; }
+
+.connection-profile { padding-block: .7rem; border-bottom: 1px solid var(--border, #ddd5c8); }
+.connection-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+.model-options { max-height: min(55vh, 420px); overflow-y:auto; }
+.model-options button > span { overflow-wrap:anywhere; min-width:0; }

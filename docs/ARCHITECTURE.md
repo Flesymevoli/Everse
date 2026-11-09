@@ -24,3 +24,7 @@ worldbook.ts 校验独立世界书并求值，preset.ts 校验预设和采样参
 角色主提示/历史后指令分别覆盖启用的 main/jailbreak，受存档偏好和 forbid_overrides 限制；original 宏替换预设原内容。行动建议作为独立应用指令追加。
 
 shared/swipes.ts 统一候选选择。Message 可选 variants/selectedVariant 与旧消息共存，模型上下文只取选中的 role/content。重新生成取最后一次玩家输入，完整成功后追加候选，不追加玩家回合；失败不写存档。JSONL 保留 swipes/swipe_id，尚未完整映射 swipe_info 等候选元数据。revisions 增加可空 expected 列；新编辑的撤销需当前消息与编辑后快照一致，防止覆盖后续候选或剧情。
+
+## 多 API 连接
+
+src/connections.ts 校验恢复的连接元信息、按选中 ID 构建现有 Config，并显式白名单序列化名称/地址/模型到 localStorage。Key 仅在 App 状态中；恢复不读取 Key，也不恢复真实连接选择。ConnectionSettings.tsx 管理连接；ModelPicker.tsx 在阅读区切换。发送时固定捕获选中连接的配置，后端协议不变。tests/connections.test.ts 使用两个本地服务验证切换后的真实请求。

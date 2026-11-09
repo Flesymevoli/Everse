@@ -7,6 +7,13 @@ import "./style.css";
 import { ModelPicker } from "./ModelPicker";
 import { ReadingView } from "./ReadingView";
 import { StoryPanel } from "./StoryPanel";
+import { ConnectionSettings } from "./ConnectionSettings";
+import {
+  connectionStorageKey,
+  restoreConnections,
+  serializeConnections,
+  resolveConnection,
+} from "./connections";
 import { Management } from "./Management";
 type Work = { id: string; card: Card; warnings: string[] };
 type Save = {
@@ -47,12 +54,23 @@ function App() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [prompt, setPrompt] = useState<unknown>(null);
-  const [config, setConfig] = useState({
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-    model: "your-model-id",
-    mock: true,
+  const [connections, setConnections] = useState(() => {
+    try {
+      return restoreConnections(localStorage.getItem(connectionStorageKey));
+    } catch {
+      return restoreConnections(null);
+    }
   });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        connectionStorageKey,
+        serializeConnections(connections),
+      );
+    } catch {
+      setError("浏览器无法保存连接信息；本页仍可使用，刷新后可能丢失设置。");
+    }
+  }, [connections]);
   const [budget, setBudget] = useState(8192),
     [reserve, setReserve] = useState(1024);
   const work = works.find((w) => w.id === selected);
@@ -93,6 +111,7 @@ function App() {
   }
   async function send(mode: "send" | "regenerate" = "send") {
     await action(async () => {
+      const config = resolveConnection(connections);
       setDraft("");
       setGenerating(true);
       const r = await fetch("/api/sessions/" + session + "/turn", {
@@ -146,7 +165,9 @@ function App() {
         <span className="brand">
           Narrative <em>Slice</em>
         </span>
-        <span className="mode">{config.mock ? "模拟模式" : "自有 API"}</span>
+        <span className="mode">
+          {connections.selectedId === null ? "模拟模式" : "自有 API"}
+        </span>
         <button
           aria-expanded={storyPanel}
           aria-controls="story-panel"
@@ -418,10 +439,12 @@ function App() {
               </span>
               <div className="composer-actions">
                 <ModelPicker
-                  model={config.model}
-                  mock={config.mock}
+                  profiles={connections.profiles}
+                  selectedId={connections.selectedId}
                   disabled={busy}
-                  onSelect={(mock) => setConfig({ ...config, mock })}
+                  onSelect={(selectedId) =>
+                    setConnections({ ...connections, selectedId })
+                  }
                   onSettings={() => setSettings(true)}
                 />
                 {generating ? (
@@ -514,37 +537,12 @@ function App() {
                 关闭
               </button>
             </div>
+            <ConnectionSettings
+              value={connections}
+              onChange={setConnections}
+              disabled={busy}
+            />
             <fieldset disabled={busy}>
-              <h3>API 与模型</h3>
-              <label className="toggle-row">
-                使用免费模拟回复
-                <input
-                  type="checkbox"
-                  checked={config.mock}
-                  onChange={(e) =>
-                    setConfig({ ...config, mock: e.target.checked })
-                  }
-                />
-              </label>
-              {(["baseUrl", "model", "apiKey"] as const).map((key) => (
-                <label key={key}>
-                  {
-                    {
-                      baseUrl: "Base URL（包含 /v1）",
-                      model: "模型 ID",
-                      apiKey: "API Key · 仅本页内存",
-                    }[key]
-                  }
-                  <input
-                    type={key === "apiKey" ? "password" : "text"}
-                    autoComplete="off"
-                    value={config[key]}
-                    onChange={(e) =>
-                      setConfig({ ...config, [key]: e.target.value })
-                    }
-                  />
-                </label>
-              ))}
               <div className="budget-fields">
                 <label>
                   上下文预算
