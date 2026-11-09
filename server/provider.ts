@@ -28,6 +28,25 @@ export async function* generate(
   onUsage?: (usage: Usage) => void,
 ): AsyncGenerator<string> {
   if (config.mock) {
+    if (messages[0]?.content.startsWith("YUNO_IMPORT_CLASSIFICATION")) {
+      const input = JSON.parse(messages[1].content) as {
+        targets: { index: number; text: string }[];
+      };
+      yield JSON.stringify({
+        sections: input.targets.map((s) => ({
+          index: s.index,
+          kind: /示例|举例/.test(s.text)
+            ? "example"
+            : /必须|禁止/.test(s.text)
+              ? "rule"
+              : /开局|开场/.test(s.text)
+                ? "opening"
+                : "lore",
+        })),
+      });
+      onUsage?.({ input: 0, output: 0, cached: 0 });
+      return;
+    }
     for (const part of ["【模拟回复】", "远处的灯亮了。", "你想走近看看吗？"]) {
       await new Promise((r) => setTimeout(r, 40));
       signal?.throwIfAborted();

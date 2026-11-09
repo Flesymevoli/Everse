@@ -379,6 +379,17 @@ function App() {
             worlds={worlds}
             mock={connections.selectedId === null}
             onBusy={setBusy}
+            onClassify={(documentId, revision) =>
+              api(`documents/${documentId}/classify`, {
+                revision,
+                config: resolveConnection(connections),
+                connectionId: connections.profiles.find(
+                  (p) => p.id === connections.selectedId,
+                )?.saved
+                  ? connections.selectedId
+                  : undefined,
+              })
+            }
             onStarted={async () => {
               await refresh();
               await load(session);
@@ -408,7 +419,13 @@ function App() {
                     ? connections.selectedId
                     : undefined,
                 },
-              );
+              ).catch(async (error) => {
+                const latest = await api<PreparingSession>(
+                  "sessions/" + session,
+                ).catch(() => null);
+                if (latest) setLoadedSession(latest);
+                throw error;
+              });
               setPrompt(result.prompt);
               return result;
             }}

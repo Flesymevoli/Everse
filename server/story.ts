@@ -95,16 +95,53 @@ export function parseStory(raw: string, history: Message[]) {
   }
   const seen = new Set<string>();
   for (const fact of patch.changes) {
-    if (
-      seen.has(fact.key) ||
-      !parseSuggestions(text).text.includes(fact.evidence)
-    )
+    const evidence = originalEvidence(
+      parseSuggestions(text).text,
+      fact.evidence,
+    );
+    if (seen.has(fact.key) || evidence === null)
       throw new StoryFormatError(
         "状态引用不在本轮原文中或键重复，草稿已保留；未提交本轮。",
       );
     seen.add(fact.key);
+    fact.evidence = evidence;
   }
   return { text, story: { ...patch, base: historyKey(history) } };
+}
+// Only layout whitespace is normalized. Return the ORIGINAL span, never a fuzzy paraphrase.
+export function originalEvidence(text: string, quote: string): string | null {
+  if (text.includes(quote)) return quote;
+  const normalize = (value: string) => {
+    const chars: string[] = [],
+      offsets: number[] = [];
+    for (let i = 0; i < value.length;) {
+      if (/\s/u.test(value[i])) {
+        let end = i + 1;
+        while (end < value.length && /\s/u.test(value[end])) end++;
+        const layout =
+          /[\p{Script=Han}\p{P}]/u.test(value[i - 1] ?? "") &&
+          /[\p{Script=Han}\p{P}]/u.test(value[end] ?? "");
+        if (!layout) {
+          chars.push(" ");
+          offsets.push(i);
+        }
+        i = end;
+      } else {
+        chars.push(value[i]);
+        offsets.push(i++);
+      }
+    }
+    return { text: chars.join(""), offsets };
+  };
+  const source = normalize(text),
+    needle = normalize(quote).text.trim();
+  if (!needle) return null;
+  const start = source.text.indexOf(needle);
+  if (start < 0) return null;
+  return text.slice(
+    source.offsets[start],
+    source.offsets[start + needle.length - 1] + 1,
+  );
 }
 export class StoryFormatError extends Error {}
 export const storyInstruction = `在正文（及可选行动建议）之后，以 <story_update>{"changes":[{"key":"稳定的实体/属性键","kind":"scene|person|goal|fact|event","value":"简短事实或目标","evidence":"从本轮正文逐字引用的依据"}]}</story_update> 结束。只输出本轮新增或改变的记录，最多16条，没有变化可用空数组。复用已有键，避免同义重复；人物意图记为goal，不当成已发生事实；不从偏好或猜测推出事实。不虚构引用，不覆盖玩家修正。此协议只组织输出，不规定文学风格，不替代作者指令。`;

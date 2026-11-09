@@ -12,10 +12,77 @@ import {
   parseStory,
   readStory,
   storyContext,
+  originalEvidence,
 } from "../server/story.js";
 import { visibleStory, type StoryFact } from "../shared/story.js";
 import type { Message } from "../server/context.js";
 import { appendVariant, selectVariant } from "../shared/swipes.js";
+import {
+  recoverOpening,
+  confirmPreparation,
+  savePreparation,
+} from "../server/preparation.js";
+
+test("引用兼容中文排版但不接受改写；保存的依据仍是逐字原文", () => {
+  const text = "雨停了。\n\n 林走进书店。";
+  assert.equal(originalEvidence(text, "雨停了。林走进书店。"), text);
+  assert.equal(originalEvidence("some thing", "something"), null);
+  assert.equal(originalEvidence(text, "林离开了书店。"), null);
+  const parsed = parseStory(
+    envelope(text, [
+      { ...fact("雨停了。林走进书店。"), evidence: "雨停了。林走进书店。" },
+    ]),
+    [],
+  );
+  assert.equal(parsed.story.changes[0].evidence, text);
+  assert.equal(
+    readStory([{ role: "assistant", content: text, story: parsed.story }]).facts
+      .length,
+    1,
+  );
+});
+test("旧失败开场可零模型调用恢复；不合格状态不采纳，开始后禁止恢复覆盖", () => {
+  const store = new Store(":memory:");
+  try {
+    const id = store.create("", []);
+    savePreparation(store, id, {
+      source: { name: "雨城", format: "text", text: "雨城侦探" },
+      characterMode: "none",
+      worldMode: "none",
+      character: { name: "", description: "" },
+      world: { name: "", description: "" },
+      player: { name: "", description: "" },
+      opening: "",
+    });
+    store.saveDraft(id, {
+      raw: envelope("雨停了。\n\n林走进书店。", [fact("雨停了。林走进书店。")]),
+      input: "",
+      base: historyKey([]),
+      error: "旧校验失败",
+    });
+    const good = recoverOpening(store, id);
+    assert.match(good.warning, /校验通过/);
+    store.saveDraft(id, {
+      raw: envelope("雨停了。", [fact("林已离开")]),
+      input: "",
+      base: historyKey([]),
+      error: "坏依据",
+    });
+    const recovered = recoverOpening(store, id);
+    assert.equal(recovered.opening, "雨停了。");
+    assert.match(recovered.warning, /尚未验证/);
+    confirmPreparation(store, id, store.options(id).openingDraft);
+    assert.equal(store.session(id).messages[0].content, "雨停了。");
+    assert.equal(store.story(id).facts.length, 0);
+    assert.equal(
+      store.db.prepare("SELECT count(*) AS n FROM model_usage").get()!.n,
+      0,
+    );
+    assert.throws(() => recoverOpening(store, id), /已有剧情/);
+  } finally {
+    store.close();
+  }
+});
 
 const fact = (value: string, key = "场景"): StoryFact => ({
   key,

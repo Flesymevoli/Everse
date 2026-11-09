@@ -3,10 +3,18 @@ import {
   confirmPreparation,
   openingRequest,
   ensurePreparation,
+  recoverOpening,
 } from "./preparation.js";
 import { randomUUID } from "node:crypto";
 import { extractWord } from "./documents.js";
 import { sourceContext } from "./document-context.js";
+import {
+  readPlan,
+  savePlan,
+  classifyPlan,
+  nextBatch,
+} from "./document-plan.js";
+import { sectionKind } from "../shared/document-plan.js";
 import {
   historyKey,
   parseStory,
@@ -67,6 +75,7 @@ export function createApp(
   const vault = new ConnectionVault(store, protector);
   const app = new Hono();
   const busy = new Set<string>();
+  const classifying = new Set<string>();
   const controllers = new Map<string, AbortController>();
   app.use("*", bodyLimit({ maxSize: 2 * 1024 * 1024 }));
   app.use("*", async (c, next) => {
@@ -124,6 +133,55 @@ export function createApp(
       documentId,
     });
   });
+  app.get("/api/documents/:id/plan", (c) => {
+    const plan = readPlan(store, c.req.param("id"));
+    return c.json({ ...plan, batchSize: nextBatch(plan).length });
+  });
+  app.get("/api/documents/:id/usage", (c) => {
+    const id = c.req.param("id");
+    readPlan(store, id);
+    return c.json(
+      store.db
+        .prepare("SELECT body FROM model_usage WHERE sessionId=? ORDER BY id")
+        .all("document:" + id)
+        .map((row) => JSON.parse(String(row.body))),
+    );
+  });
+  app.post("/api/documents/:id/plan", async (c) => {
+    const id = c.req.param("id");
+    const body = z
+      .object({
+        revision: z.number().int().nonnegative(),
+        index: z.number().int().nonnegative(),
+        kind: sectionKind,
+      })
+      .strict()
+      .parse(await c.req.json());
+    if (classifying.has(id))
+      return c.json({ error: "文档正在分类，请稍后修改" }, 409);
+    const plan = readPlan(store, id),
+      section = plan.sections[body.index];
+    if (!section) throw new Error("段落不存在");
+    section.kind = body.kind;
+    section.origin = "user";
+    return c.json(savePlan(store, plan, body.revision));
+  });
+  app.post("/api/documents/:id/classify", async (c) => {
+    const id = c.req.param("id");
+    const body = turn
+      .pick({ config: true, connectionId: true })
+      .extend({ revision: z.number().int().nonnegative() })
+      .parse(await c.req.json());
+    if (body.connectionId && !body.config.mock)
+      body.config = await vault.config(body.connectionId);
+    if (classifying.has(id)) return c.json({ error: "文档正在分类" }, 409);
+    classifying.add(id);
+    try {
+      return c.json(await classifyPlan(store, id, body.config, body.revision));
+    } finally {
+      classifying.delete(id);
+    }
+  });
   app.get("/api/documents/:id/original", (c) => {
     const row = store.db
       .prepare("SELECT body FROM source_documents WHERE id=?")
@@ -156,6 +214,11 @@ export function createApp(
       id = c.req.param("id");
     if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
     return c.json(confirmPreparation(store, id, body));
+  });
+  app.post("/api/sessions/:id/recover-opening", (c) => {
+    const id = c.req.param("id");
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    return c.json(recoverOpening(store, id));
   });
   app.post("/api/sessions/:id/opening", async (c) => {
     const body = turn
@@ -219,10 +282,10 @@ export function createApp(
       return c.json(
         {
           error:
-            (error instanceof StoryFormatError
+            error instanceof StoryFormatError
               ? error.message
-              : generationError(error, controller.signal.aborted)) +
-            "原草稿已保留。",
+              : generationError(error, controller.signal.aborted) +
+                "原草稿已保留。",
         },
         400,
       );

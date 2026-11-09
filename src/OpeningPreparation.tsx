@@ -6,6 +6,7 @@ import type { SessionOptions } from "../server/settings";
 import { preparationSchema, type Preparation } from "../shared/preparation";
 import { readPlayer } from "../shared/player";
 import { expand } from "../shared/character-text";
+import { DocumentPlanEditor } from "./DocumentPlanEditor";
 export type PreparingSession = {
   story?: import("../shared/story").StoryView;
   draft?: { raw: string; input: string; error: string } | null;
@@ -38,6 +39,7 @@ export function OpeningPreparation({
   onGenerate,
   onStarted,
   onBusy,
+  onClassify,
 }: {
   session: PreparingSession;
   characters: { id: string; card: Card }[];
@@ -47,6 +49,7 @@ export function OpeningPreparation({
   onGenerate: (draft: Preparation) => Promise<{ opening: string }>;
   onStarted: () => Promise<void>;
   onBusy: (value: boolean) => void;
+  onClassify: (documentId: string, revision: number) => Promise<unknown>;
 }) {
   const [draft, setDraft] = useState<Preparation>(() => {
     if (session.options.openingDraft) return session.options.openingDraft;
@@ -152,6 +155,30 @@ export function OpeningPreparation({
         </p>
       )}
       {notice && <p role="status">{notice}</p>}
+      {session.draft?.raw && session.draft.error && (
+        <div className="opening-preview">
+          <p>上次生成的开场还在本机，可以先恢复检查，不必重新付费生成。</p>
+          <button
+            disabled={working}
+            type="button"
+            onClick={() =>
+              void run(async () => {
+                const result = await api<{ opening: string; warning: string }>(
+                  `sessions/${session.id}/recover-opening`,
+                  {},
+                );
+                setDraft((current) => ({
+                  ...current,
+                  opening: result.opening,
+                }));
+                setNotice(result.warning);
+              })
+            }
+          >
+            恢复上次开场（不调用 AI）
+          </button>
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -273,6 +300,21 @@ export function OpeningPreparation({
                 </>
               )}
             </div>
+          )}
+          {draft.source?.reference && draft.source.documentId && (
+            <DocumentPlanEditor
+              key={draft.source.documentId}
+              documentId={draft.source.documentId}
+              disabled={working}
+              mock={mock}
+              onBusy={(value) => {
+                setWorking(value);
+                onBusy(value);
+              }}
+              onClassify={(revision) =>
+                onClassify(draft.source!.documentId!, revision)
+              }
+            />
           )}
           <details
             open={
@@ -493,6 +535,7 @@ export function OpeningPreparation({
           <label>
             开场正文
             <textarea
+              aria-label="开场正文"
               maxLength={100000}
               value={draft.opening}
               onChange={(e) => setDraft({ ...draft, opening: e.target.value })}

@@ -8,6 +8,25 @@ import type { Config } from "./provider.js";
 import { resolveBudget } from "./budget.js";
 import { sourceContext } from "./document-context.js";
 import { parseStory, storyInstruction } from "./story.js";
+import { visibleStory } from "../shared/story.js";
+export function recoverOpening(store: Store, id: string) {
+  const session = ensurePreparation(store, id);
+  const saved = store.draft(id);
+  if (!saved?.raw || !session.options.openingDraft)
+    throw new Error("没有可恢复的开场草稿");
+  let opening = visibleStory(saved.raw).trim();
+  let warning =
+    "正文已恢复；状态尚未验证，不会作为事实保存。请检查是否完整，再确认开始。";
+  try {
+    opening = parseStory(saved.raw, []).text;
+    warning = "已恢复原开场，状态校验通过；未调用 AI。请预览后确认开始。";
+  } catch {
+    /* Explicit recovery keeps text, never unvalidated state. */
+  }
+  if (!opening) throw new Error("草稿没有可恢复的正文");
+  savePreparation(store, id, { ...session.options.openingDraft, opening });
+  return { opening, warning };
+}
 export function ensurePreparation(store: Store, id: string) {
   const s = store.session(id);
   if (s.options.archived) throw new Error("请先恢复归档存档");
@@ -164,6 +183,7 @@ export function openingRequest(
     d.source,
     `${d.player.description}\n${d.opening}`,
     Math.min(6000, Math.max(1600, Math.floor(limits.budget / 2))),
+    "opening",
   );
   const prompt = buildContext(
     r.card,
