@@ -69,7 +69,8 @@ function App() {
   const preparing =
     !!loadedSession &&
     (loadedSession.options.openingState === "preparing" ||
-      loadedSession.messages.length === 0);
+      (loadedSession.options.openingState !== "started" &&
+        loadedSession.messages.length === 0));
   const [worlds, setWorlds] = useState<WorldItem[]>([]);
   const [activeWorldId, setActiveWorldId] = useState<string | null>(null);
   const [works, setWorks] = useState<Work[]>([]),
@@ -187,7 +188,10 @@ function App() {
       setGenerating(false);
     }
   }
-  async function send(mode: "send" | "regenerate" = "send") {
+  async function send(
+    mode: "send" | "regenerate" = "send",
+    initialInput?: string,
+  ) {
     await action(async () => {
       const config = resolveConnection(connections);
       setDraft("");
@@ -197,7 +201,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestId: crypto.randomUUID(),
-          input,
+          input: initialInput ?? input,
           config,
           ...(!automaticBudget ? { budget, reserve } : {}),
           mode,
@@ -492,17 +496,6 @@ function App() {
               worlds={worlds}
               mock={false}
               onBusy={setBusy}
-              onGuide={(draft) =>
-                api("sessions/" + session + "/guide", {
-                  draft,
-                  config: resolveConnection(connections),
-                  connectionId: connections.profiles.find(
-                    (p) => p.id === connections.selectedId,
-                  )?.saved
-                    ? connections.selectedId
-                    : undefined,
-                })
-              }
               onClassify={(documentId, revision) =>
                 api(`documents/${documentId}/classify`, {
                   revision,
@@ -517,42 +510,6 @@ function App() {
               onStarted={async () => {
                 await refresh();
                 await load(session);
-              }}
-              modelControl={
-                <ModelPicker
-                  profiles={connections.profiles}
-                  selectedId={connections.selectedId}
-                  disabled={busy}
-                  onSelect={(selectedId) =>
-                    setConnections({ ...connections, selectedId })
-                  }
-                  onSettings={() => setSettings(true)}
-                />
-              }
-              onGenerate={async (draft) => {
-                const config = resolveConnection(connections);
-                const result = await api<{
-                  opening: string;
-                  prompt: unknown;
-                  warning?: string;
-                }>("sessions/" + session + "/opening", {
-                  draft,
-                  config,
-                  ...(!automaticBudget ? { budget, reserve } : {}),
-                  connectionId: connections.profiles.find(
-                    (p) => p.id === connections.selectedId,
-                  )?.saved
-                    ? connections.selectedId
-                    : undefined,
-                }).catch(async (error) => {
-                  const latest = await api<PreparingSession>(
-                    "sessions/" + session,
-                  ).catch(() => null);
-                  if (latest) setLoadedSession(latest);
-                  throw error;
-                });
-                setPrompt(result.prompt);
-                return result;
               }}
             />
           ) : (
@@ -625,10 +582,31 @@ function App() {
                 <div className="empty-reading">
                   <span>一</span>
                   <p>
-                    {work
-                      ? "一段设定，一句开场。\n故事的方向，由你决定。"
-                      : "你不必预先知道结局。\n从一个角色、一个念头开始。"}
+                    {session
+                      ? "设定已就绪。按作品要求开始，或在下方直接介绍你的身份。"
+                      : work
+                        ? "一段设定，一句开场。\n故事的方向，由你决定。"
+                        : "你不必预先知道结局。\n从一个角色、一个念头开始。"}
                   </p>
+                  {session && (
+                    <>
+                      <button
+                        className="primary"
+                        disabled={busy}
+                        onClick={() =>
+                          void send(
+                            "send",
+                            "请按照作品设定开始；若设定包含角色创建或初始化流程，请先引导我，我会直接用文字回复。",
+                          )
+                        }
+                      >
+                        按设定开始
+                      </button>
+                      <small className="muted">
+                        使用下方选中的模型生成，可能产生费用。
+                      </small>
+                    </>
+                  )}
                 </div>
               )}
             </>

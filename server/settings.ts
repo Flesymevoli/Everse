@@ -5,6 +5,7 @@ import { directorSchema } from "../shared/director.js";
 import { parametersSchema } from "./preset.js";
 export const optionsSchema = z
   .object({
+    conversationalStart: z.boolean().optional(),
     storySource: preparationSchema.shape.source,
     storyTracking: z.boolean().optional(),
     openingState: z.enum(["preparing", "started"]).optional(),

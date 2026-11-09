@@ -146,9 +146,10 @@ export function savePreparation(store: Store, id: string, raw: unknown) {
 export function confirmPreparation(store: Store, id: string, raw: unknown) {
   const s = ensurePreparation(store, id),
     d = preparationSchema.parse(raw);
-  if (!d.opening.trim())
-    throw new Error("请先选择、编写或生成开场剧情，再确认开始");
   const r = preparationResources(store, d);
+  d.opening = d.opening.trim()
+    ? d.opening
+    : r.world?.data.first_mes || r.card.data.first_mes || "";
   const guideWarning = validateGuide(store, d);
   sourceContext(store, d.source, d.opening); // Reject missing references before committing a new game.
   const generated = store.draft(id);
@@ -186,16 +187,24 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
         : null;
     store.db.prepare("UPDATE sessions SET cardId=?,messages=? WHERE id=?").run(
       cardId,
-      JSON.stringify([
-        {
-          role: "assistant",
-          content: expand(openingChoices.text, r.card.data.name, d.player.name),
-          suggestions: openingChoices.suggestions,
-          raw: d.opening,
-          story: openingStory,
-          warning: openingWarning,
-        },
-      ]),
+      JSON.stringify(
+        d.opening.trim()
+          ? [
+              {
+                role: "assistant",
+                content: expand(
+                  openingChoices.text,
+                  r.card.data.name,
+                  d.player.name,
+                ),
+                suggestions: openingChoices.suggestions,
+                raw: d.opening,
+                story: openingStory,
+                warning: openingWarning,
+              },
+            ]
+          : [],
+      ),
       id,
     );
     store.setOptions(id, {
@@ -203,6 +212,7 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       worldId,
       player: d.player,
       openingState: "started",
+      conversationalStart: true,
       openingDraft: undefined,
       presetId: d.presetId,
       worldbookId: d.worldbookId,
@@ -211,7 +221,8 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       openingGuide: guideWarning ? undefined : d.guide,
       name: d.name?.trim() || s.options.name || d.source?.name,
     });
-    store.db.prepare("DELETE FROM turn_drafts WHERE sessionId=?").run(id);
+    if (d.opening.trim())
+      store.db.prepare("DELETE FROM turn_drafts WHERE sessionId=?").run(id);
     // A new game offers suggestions by default; an explicit saved preference
     // (including off) is retained. Existing saves are not migrated.
     if (!store.db.prepare("SELECT id FROM preferences WHERE id=?").get(id))

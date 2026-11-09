@@ -1062,6 +1062,7 @@ export function createApp(
       session.options.storySource,
       [...history.slice(-2).map((m) => m.content), input].join("\n"),
       Math.min(6000, Math.max(1600, Math.floor(budget / 2))),
+      history.length === 0 ? "opening" : undefined,
     );
     const prompt = buildContext(runtimeCard, history, input, budget, reserve, {
       player:
@@ -1082,6 +1083,9 @@ export function createApp(
       automaticBudget: limits.automaticBudget,
       scanDepth: session.options.scanDepth,
       extraInstruction: [
+        session.options.conversationalStart
+          ? "若作品包含角色创建或初始化流程，请尊重原始顺序，通过普通对话引导玩家回复，未确认的身份和选择不要代填；按已有对话进展继续，不重复询问已回答的问题。没有初始化要求时直接展开故事，不额外强加角色问卷。"
+          : "",
         session.suggestions
           ? tracking
             ? suggestionInstruction.replace("在末尾", "在故事状态标签之前")

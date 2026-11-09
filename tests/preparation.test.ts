@@ -44,10 +44,6 @@ test("从零存档：保存准备/重开/确认开场/首轮互动；不覆盖�
       (await post(app, path + "/turn", { input: "提前发送", config })).status,
       400,
     );
-    assert.equal(
-      (await post(app, path + "/start", { ...draft, opening: " " })).status,
-      400,
-    );
     assert.equal(store.cards().length, 0);
     assert.equal((await post(app, path + "/preparation", draft)).status, 200);
     store.close();
@@ -221,5 +217,65 @@ test("字段错误明确指出回复预算/模型字段，不回显 API Key", as
     assert.ok(!text.includes("not-real-sensitive-value"));
   } finally {
     store.close();
+  }
+});
+
+test("没有开场也可进入并重开，以普通文字完成初始化且不额外调用模型", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "everse-conversation-start-"));
+  let store = new Store(join(dir, "test.sqlite"));
+  try {
+    let app = createApp(store);
+    const created = (await (
+      await post(app, "/api/sessions", { prepare: true })
+    ).json()) as { id: string };
+    const path = "/api/sessions/" + created.id;
+    const source = {
+      name: "雨城",
+      format: "text",
+      text: "初始化规则：先询问玩家姓名，再询问职业，玩家确认前不要进入剧情。",
+    };
+    assert.equal(
+      (
+        await post(app, path + "/start", {
+          ...draft,
+          characterMode: "none",
+          worldMode: "none",
+          source,
+          opening: "",
+          player: { name: "", description: "" },
+        })
+      ).status,
+      200,
+    );
+    assert.deepEqual(store.session(created.id).messages, []);
+    assert.equal(store.session(created.id).options.openingState, "started");
+    assert.equal(
+      store.db.prepare("SELECT count(*) n FROM model_usage").get()!.n,
+      0,
+    );
+    store.close();
+    store = new Store(join(dir, "test.sqlite"));
+    app = createApp(store);
+    assert.equal(store.session(created.id).options.openingState, "started");
+    const response = await post(app, path + "/turn", {
+      input: "我叫小雨，请按设定开始",
+      config,
+    });
+    const events = await response.text();
+    assert.match(events, /"type":"done"/);
+    assert.match(events, /先询问玩家姓名/);
+    assert.match(events, /不重复询问已回答的问题/);
+    assert.equal(
+      store.session(created.id).messages[0].content,
+      "我叫小雨，请按设定开始",
+    );
+    assert.equal(store.session(created.id).messages.length, 2);
+    assert.equal(
+      (await post(app, path + "/start", { ...draft, opening: "" })).status,
+      400,
+    );
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
   }
 });

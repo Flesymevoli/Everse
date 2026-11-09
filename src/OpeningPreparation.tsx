@@ -1,5 +1,5 @@
 import { requestJson as api, readJson, fetchLocal } from "./response";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import type { Card } from "../server/cards";
 import type { WorldItem } from "./Library";
 import type { Message } from "../server/context";
@@ -8,7 +8,6 @@ import { preparationSchema, type Preparation } from "../shared/preparation";
 import { readPlayer } from "../shared/player";
 import { expand } from "../shared/character-text";
 import { DocumentPlanEditor } from "./DocumentPlanEditor";
-import type { OpeningGuide } from "../shared/opening-guide";
 export type PreparingSession = {
   editRevision?: string;
   story?: import("../shared/story").StoryView;
@@ -23,26 +22,18 @@ export function OpeningPreparation({
   session,
   characters,
   worlds,
-  modelControl,
   mock,
-  onGenerate,
   onStarted,
   onBusy,
   onClassify,
-  onGuide,
 }: {
   session: PreparingSession;
   characters: { id: string; card: Card }[];
   worlds: WorldItem[];
-  modelControl: ReactNode;
   mock: boolean;
-  onGenerate: (
-    draft: Preparation,
-  ) => Promise<{ opening: string; warning?: string }>;
   onStarted: () => Promise<void>;
   onBusy: (value: boolean) => void;
   onClassify: (documentId: string, revision: number) => Promise<unknown>;
-  onGuide: (draft: Preparation) => Promise<{ guide: OpeningGuide }>;
 }) {
   const [draft, setDraft] = useState<Preparation>(() => {
     if (session.options.openingDraft) return session.options.openingDraft;
@@ -70,7 +61,6 @@ export function OpeningPreparation({
     };
   });
   const [working, setWorking] = useState(false),
-    [generating, setGenerating] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   useEffect(() => {
@@ -143,23 +133,14 @@ export function OpeningPreparation({
       setError(e instanceof Error ? e.message : "操作失败");
     } finally {
       setWorking(false);
-      setGenerating(false);
       onBusy(false);
     }
-  }
-  function generateOpening() {
-    void run(async () => {
-      setGenerating(true);
-      const result = await onGenerate(draft);
-      setDraft({ ...draft, opening: result.opening });
-      setNotice(result.warning ?? "开场已生成，请预览或编辑后确认开始。");
-    });
   }
   return (
     <section className="settings opening-preparation" aria-label="开局准备">
       <h2>开局准备</h2>
       <p>
-        从一个念头开始，几个字也可以。有作者开场时可直接预览；没有时再生成。身份和详细设定都可跳过。
+        填写或导入故事设定后即可进入。角色初始化按作品要求在正文中进行，直接用文字回复，不必先填角色表或生成开场预览。
       </p>
       {error && (
         <p role="alert" className="error">
@@ -466,28 +447,8 @@ export function OpeningPreparation({
           <details>
             <summary>我在故事中是谁？（可选）</summary>
             <p>
-              有作者创建流程时，可以读取设定中的问题与选项；不必填写统一角色表。
+              也可以留空，进入故事后按作品要求直接回复。已有旧版问答仍会保留。
             </p>
-            <button
-              type="button"
-              onClick={() =>
-                void run(async () => {
-                  const result = await onGuide({ ...draft, guide: undefined });
-                  setDraft({ ...draft, guide: result.guide });
-                  setNotice(
-                    result.guide.questions.length
-                      ? "请按设定选择或自由回答；答案会随准备保存，参与开场和后续剧情。"
-                      : "资料没有明确的角色创建要求，可跳过身份直接开局。",
-                  );
-                })
-              }
-            >
-              按作品设定生成角色引导
-            </button>
-            <small>
-              {mock ? "使用模拟模型" : "调用当前 API 一次，可能产生费用"}
-              ；不自动重试，不替你决定身份。
-            </small>
             {draft.guide?.questions.map((question, index) => (
               <div className="opening-question" key={index}>
                 <label>
@@ -595,83 +556,40 @@ export function OpeningPreparation({
               </select>
             </label>
           </details>
-          <h3>3 · 选择或写下开场剧情</h3>
-          {choices.length > 0 ? (
-            <label>
-              角色卡与世界书自带开场
-              <select
-                value={choices.findIndex((c) => c.text === draft.opening)}
-                onChange={(e) => {
-                  const choice = choices[Number(e.target.value)];
-                  if (choice) setDraft({ ...draft, opening: choice.text });
-                }}
-              >
-                <option value={-1}>自定义开场（选择条目将替换编辑区）</option>
-                {choices.map((c, i) => (
-                  <option key={i} value={i}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <p className="muted">
-              没有现成开场，可以手写几句话，或主动让所选模型生成。
-            </p>
+          {(choices.length > 0 || draft.opening.trim()) && (
+            <details>
+              <summary>已有开场（可选）</summary>
+              {choices.length > 0 && (
+                <label>
+                  作品自带开场
+                  <select
+                    value={choices.findIndex((c) => c.text === draft.opening)}
+                    onChange={(e) => {
+                      const choice = choices[Number(e.target.value)];
+                      if (choice) setDraft({ ...draft, opening: choice.text });
+                    }}
+                  >
+                    <option value={-1}>沿用已有草稿或作品默认开场</option>
+                    {choices.map((c, i) => (
+                      <option key={i} value={i}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <p className="existing-opening">{preview || choices[0]?.text}</p>
+            </details>
           )}
-          <label>
-            开场正文
-            <textarea
-              aria-label="开场正文"
-              maxLength={100000}
-              value={draft.opening}
-              onChange={(e) => setDraft({ ...draft, opening: e.target.value })}
-              placeholder="例如：你推开书店的门，柜台上的信封写着你的名字。"
-            />
-          </label>
-          <div className="opening-model">
-            {modelControl}
-            <button type="button" onClick={generateOpening}>
-              {mock ? "用模拟模型生成开场" : "用所选 API 生成开场"}
-            </button>
-          </div>
           <p className="muted">
-            {mock
-              ? "当前使用免费模拟模型。"
-              : "点击生成将调用你选择的 API，可能产生费用。"}
-            不会自动重试，原草稿在失败时保留。
+            进入后可让 AI
+            按设定开始，也可以直接输入你的身份或行动。只有发送给模型时才会调用
+            API。
           </p>
-          <section className="opening-preview" aria-label="开场预览">
-            <h3>开场预览</h3>
-            {preview.trim() ? (
-              preview.split(/\n\s*\n/).map((p, i) => <p key={i}>{p}</p>)
-            ) : (
-              <p>选择、编写或生成开场后，这里会显示第一幕。</p>
-            )}
-          </section>
-          {!draft.opening.trim() && (
-            <p id="opening-next-step">
-              还缺少开场剧情。可以在上方手写，或点击下方按钮生成并预览。
-              {mock
-                ? "当前为免费模拟模型。"
-                : "生成将调用当前选择的 API，可能产生费用。"}
-            </p>
-          )}
           <div className="form-actions">
-            {draft.opening.trim() ? (
-              <button type="submit" className="primary">
-                确认开始故事
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="primary"
-                aria-describedby="opening-next-step"
-                onClick={generateOpening}
-              >
-                生成开场并预览
-              </button>
-            )}
+            <button type="submit" className="primary">
+              进入故事
+            </button>
             <button
               type="button"
               onClick={() =>
@@ -692,21 +610,6 @@ export function OpeningPreparation({
           )}
         </fieldset>
       </form>
-      {generating && (
-        <div role="status">
-          正在生成开场…{" "}
-          <button
-            type="button"
-            onClick={() =>
-              void api("sessions/" + session.id + "/stop", {}).catch(() =>
-                setError("停止失败，请稍后重试"),
-              )
-            }
-          >
-            停止生成
-          </button>
-        </div>
-      )}
     </section>
   );
 }
