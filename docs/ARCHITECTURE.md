@@ -1,5 +1,9 @@
 # 架构
 
+分类首版：`document_plans` 按原文 hash 保存分析单元、类别、来源（模型/人工）及 revision。`document-plan.ts` 执行一次有界分类请求与校验；`document-context.ts` 区分持续规则、开局指令、按需资料及默认排除的示例。未实现完整语义分段，范围与批次费用见 IMPORT-CLASSIFICATION.md。当前单服务进程内锁，版本冲突拒绝覆盖。
+
+开场恢复：`recoverOpening` 只读本地生成结果并更新准备草稿，不调用模型、不直接提交剧情。引用排版归一化后必须映射回原文；无效状态不随手动恢复正文提交。
+
 长文补充：`source_documents.extracted` 保存完整提取文本（旧库增列，旧文档为空且不自动重解析）。新长文以 `source.reference + documentId` 引用，`text` 是玩家补充方向；开局和回合通过 `document-context.ts` 按位置与关键词选择有界片段。没有将所有原文复制到每个存档或模型请求，也没有新增模型调用。短文与旧存档维持原行为；缺失引用明确报错。语义分类及事件记忆仍待开发。
 
 Word 导入增量：`server/documents.ts` 在本机受限读取 DOCX，Mammoth 只提取文字；`source_documents` 保留原始文件，准备页的 source 保存 documentId、格式、提取文本和兼容提示。与 TXT 和现有开局使用同一条数据链路，不调用模型；详见 [WORD-IMPORT.md](WORD-IMPORT.md)。下文“尚无 Word”描述的是此前状态增量的边界，本增量已补上 DOCX 纯文字导入，旧 DOC/OCR 仍不支持。
