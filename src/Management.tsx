@@ -1,3 +1,4 @@
+import { requestJson as request } from "./response";
 import { BookEntryFields, type BookDraft } from "./BookEntryFields";
 import { useEffect, useState } from "react";
 import type { SessionOptions } from "../server/settings";
@@ -8,21 +9,7 @@ type Asset = {
   warnings: string[];
   original: unknown;
 };
-async function request<T>(path: string, value?: unknown): Promise<T> {
-  const response = await fetch(
-    "/api/" + path,
-    value === undefined
-      ? {}
-      : {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(value),
-        },
-  );
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? "操作失败");
-  return body as T;
-}
+
 export function Management({
   session,
   cardId,

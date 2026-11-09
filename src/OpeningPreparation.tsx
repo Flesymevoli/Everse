@@ -1,3 +1,4 @@
+import { requestJson as api, readJson, fetchLocal } from "./response";
 import { useEffect, useState, type ReactNode } from "react";
 import type { Card } from "../server/cards";
 import type { WorldItem } from "./Library";
@@ -17,21 +18,7 @@ export type PreparingSession = {
   options: SessionOptions;
   messages: Message[];
 };
-async function api<T>(path: string, body?: unknown): Promise<T> {
-  const r = await fetch(
-    "/api/" + path,
-    body === undefined
-      ? {}
-      : {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-  );
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error ?? "操作失败");
-  return data;
-}
+
 export function OpeningPreparation({
   session,
   characters,
@@ -264,7 +251,7 @@ export function OpeningPreparation({
                   if (/\.docx$/i.test(file.name)) {
                     if (file.size > 2 * 1024 * 1024)
                       throw new Error("Word 文件上限 2 MB，请拆分或移除大图片");
-                    const response = await fetch(
+                    const response = await fetchLocal(
                       "/api/documents/word?name=" +
                         encodeURIComponent(file.name),
                       {
@@ -273,9 +260,7 @@ export function OpeningPreparation({
                         body: file,
                       },
                     );
-                    const result = await response.json();
-                    if (!response.ok)
-                      throw new Error(result.error ?? "Word 导入失败");
+                    const result = await readJson(response);
                     const source = preparationSchema.shape.source.parse(result);
                     setDraft({ ...draft, source });
                     setNotice(

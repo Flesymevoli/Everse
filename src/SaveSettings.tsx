@@ -1,3 +1,4 @@
+import { readJson, fetchLocal } from "./response";
 import { useEffect, useRef, useState } from "react";
 import { Management } from "./Management";
 import type { PreparingSession } from "./OpeningPreparation";
@@ -23,10 +24,9 @@ export function SaveSettings({
     let active = true;
     setSave(null);
     setError("");
-    fetch(`/api/sessions/${id}`)
+    fetchLocal(`/api/sessions/${id}`)
       .then(async (r) => {
-        const body = await r.json();
-        if (!r.ok) throw new Error(body.error ?? "读取失败");
+        const body = await readJson(r);
         if (active) setSave(body);
       })
       .catch((e) => {
@@ -80,9 +80,8 @@ export function SaveSettings({
           disabled={disabled}
           onUpdate={async (next) => {
             await onUpdate(next);
-            const r = await fetch(`/api/sessions/${next}`);
-            if (!r.ok) throw new Error("刷新存档失败");
-            setSave(await r.json());
+            const r = await fetchLocal(`/api/sessions/${next}`);
+            setSave(await readJson(r));
           }}
         />
       )}

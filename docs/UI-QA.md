@@ -69,3 +69,7 @@
 ## 行内改写交互验收
 
 62 项测试及类型检查、构建通过。浏览器插件不可用，使用 Playwright 和隔离内存存档，在 1440/375/320px 验证：粗略跨段选区扩展、小编辑框、无模态窗口、模拟改写、原位置增删标识、确认高亮、取消与恢复。无横向溢出及页面脚本错误，未调用付费模型。截图 inline-edit-compact-{width}.png、inline-edit-{width}.png 和 inline-edit-qa.json 位于 D:/酒馆/ui-evidence。测试使用 DOM Range 与 pointerup 事件，未验证实体手机原生选择手柄。
+
+## 请求稳定性收尾
+
+63 项测试、类型检查、生产构建及 test:install 通过。response.test.ts 补充空响应、HTML、null、响应读取中断、网络失败不重试、取消信号与请求编码。浏览器使用隔离内存存档验证 500 空响应、连接拒绝的提示；直接注入重叠加载意图并延迟旧响应，确认新存档不会被旧结果覆盖（正常 UI 有禁用保护，此项额外验证不依赖按钮禁用）。无页面脚本错误。证据：D:/酒馆/ui-evidence/resilience-qa.json；未调用真实 API 或修改用户存档。

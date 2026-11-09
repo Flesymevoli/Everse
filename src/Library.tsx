@@ -1,4 +1,5 @@
-import { readJson } from "./response";
+import { readJson, fetchLocal } from "./response";
+
 import { CreationGuide, PlayerFields } from "./CreationGuide";
 import { readPlayer } from "../shared/player";
 import { BookEntryFields, type BookDraft } from "./BookEntryFields";
@@ -59,7 +60,7 @@ export function Library({
   const [working, setWorking] = useState(false),
     [error, setError] = useState("");
   async function post(path: string, body: unknown) {
-    const r = await fetch("/api/" + path, {
+    const r = await fetchLocal("/api/" + path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -237,13 +238,12 @@ export function Library({
                     original: JSON.parse(await file.text()),
                   });
                 else if (file.name.toLowerCase().endsWith(".png")) {
-                  const r = await fetch("/api/cards", {
+                  const r = await fetchLocal("/api/cards", {
                     method: "POST",
                     headers: { "Content-Type": "image/png" },
                     body: file,
                   });
-                  if (!r.ok)
-                    throw new Error((await r.json()).error ?? "导入失败");
+                  if (!r.ok) await readJson(r);
                 } else await post("cards", JSON.parse(await file.text()));
                 await onRefresh();
               });

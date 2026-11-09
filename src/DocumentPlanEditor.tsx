@@ -1,3 +1,4 @@
+import { readJson, fetchLocal } from "./response";
 import { useState } from "react";
 import { kinds, type DocumentPlan } from "../shared/document-plan";
 type Props = {
@@ -20,9 +21,8 @@ export function DocumentPlanEditor({
     [working, setWorking] = useState(false),
     [page, setPage] = useState(0);
   async function load() {
-    const r = await fetch(`/api/documents/${documentId}/plan`);
-    const result = await r.json();
-    if (!r.ok) throw new Error(result.error);
+    const r = await fetchLocal(`/api/documents/${documentId}/plan`);
+    const result = await readJson(r);
     setPlan(result);
   }
   async function run(fn: () => Promise<void>) {
@@ -93,7 +93,7 @@ export function DocumentPlanEditor({
                   disabled={disabled || working}
                   onChange={(e) =>
                     void run(async () => {
-                      const response = await fetch(
+                      const response = await fetchLocal(
                         `/api/documents/${documentId}/plan`,
                         {
                           method: "POST",
@@ -105,8 +105,7 @@ export function DocumentPlanEditor({
                           }),
                         },
                       );
-                      const result = await response.json();
-                      if (!response.ok) throw new Error(result.error);
+                      const result = await readJson(response);
                       setPlan(result);
                     })
                   }
@@ -152,11 +151,10 @@ export function DocumentPlanEditor({
             disabled={working || disabled}
             onClick={() =>
               void run(async () => {
-                const response = await fetch(
+                const response = await fetchLocal(
                   `/api/documents/${documentId}/usage`,
                 );
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error);
+                const data = await readJson(response);
                 setUsage(data);
               })
             }

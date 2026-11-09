@@ -1,4 +1,5 @@
-import { readJson } from "./response";
+import { requestJson as api, readJson, fetchLocal } from "./response";
+
 import { textDiff } from "./text-editing";
 import {
   OpeningPreparation,
@@ -35,20 +36,7 @@ type Save = {
   cardId: string;
   options?: { name?: string; archived?: boolean; worldId?: string | null };
 };
-async function api<T>(path: string, body?: unknown): Promise<T> {
-  const r = await fetch(
-    "/api/" + path,
-    body === undefined
-      ? {}
-      : {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-  );
-  const data = await readJson(r);
-  return data as T;
-}
+
 function App() {
   const [textEdit, setTextEdit] = useState<{
     selection: TextSelection;
@@ -154,10 +142,19 @@ function App() {
       .catch((e) => setError(String(e)));
     void refresh().catch((e) => setError(String(e)));
   }, []);
+  const loadVersion = useRef(0);
   async function load(id: string) {
-    const s = await api<PreparingSession & { suggestions: boolean }>(
-      "sessions/" + id,
-    );
+    const version = ++loadVersion.current;
+    let s: PreparingSession & { suggestions: boolean };
+    try {
+      s = await api<PreparingSession & { suggestions: boolean }>(
+        "sessions/" + id,
+      );
+    } catch (error) {
+      if (version !== loadVersion.current) return;
+      throw error;
+    }
+    if (version !== loadVersion.current) return;
     setLoadedSession(s);
     setTextEdit(null);
     setEditPreview(null);
@@ -188,7 +185,7 @@ function App() {
       const config = resolveConnection(connections);
       setDraft("");
       setGenerating(true);
-      const r = await fetch("/api/sessions/" + session + "/turn", {
+      const r = await fetchLocal("/api/sessions/" + session + "/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -204,10 +201,7 @@ function App() {
             : undefined,
         }),
       });
-      if (!r.ok) {
-        const e = await r.json();
-        throw new Error(e.error);
-      }
+      if (!r.ok) await readJson(r);
       if (!r.body) throw new Error("浏览器未提供响应流");
       let buffer = "",
         completed = false;
