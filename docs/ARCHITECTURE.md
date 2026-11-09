@@ -74,3 +74,11 @@ server/creation.ts 校验简单表单并映射到现有 V2 角色卡或 yuno_wor
 开局数据流：session_options 中的准备草稿 → 现有角色/世界资源或简单资源 → 开场预览 → SQLite 事务确认 → 原回合链路。实现见 shared/preparation.ts、server/preparation.ts、src/OpeningPreparation.tsx。生成复用原 provider/context，不引入 Agent；准备状态与草稿不允许通过通用 options 接口绕过确认写入。完整说明见 OPENING-FLOW.md。
 
 预算策略由 server/budget.ts 统一：默认自动目标而非模型硬上限；保留预设覆盖；模型默认回复长度时省略 max_tokens。context.ts 仍只裁剪请求历史，未新增摘要/长期记忆。来源、估算和限制见 BUDGETS.md。
+
+## 存档引导与阅读交互（2026-11-09）
+
+`shared/director.ts` 校验当前存档的人物、状态、世界观与剧情方向。专用 `/director` 接口检查生成锁和递增版本，事务记录 `director_revisions` 并保存 options；不修改原卡或消息。开场和续写请求都注入明确玩家修订，方向是未来意图而非既成事实。清空字段后不再注入。完整备份仍需 SQLite，JSONL 不携带这些应用选项。
+
+`server/opening-guide.ts` 使用一次文本生成整理作者开局问题，引用必须在所用资料中出现。答案写入准备草稿，确认后进入后续上下文；没有每答一题调用模型。当前不执行作者条件分支脚本，长文检索不能保证覆盖全部开局规则。
+
+新确认开局启用建议，保留已有显式偏好。开场建议从协议中解析，模型原始草稿保留；普通列表仅在 ReadingView 显示时识别，不更改历史文本。输入框独立于正文滚动区；跟随正文只在读者接近末尾时发生。
