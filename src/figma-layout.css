@@ -1,5 +1,6 @@
 /* Everse application theme. Source: Figma Reader 2:2; see docs/STYLE-GUIDE.md. */
 :root {
+  --font-app: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   --paper: #fbfaf6;
   --sidebar: #f3f0e9;
   --ink: #2e2a26;
@@ -57,8 +58,7 @@ html {
   background: #bd745d;
   color: white;
   font:
-    bold 27px Georgia,
-    serif;
+    bold 27px var(--font-app);
 }
 .library-brand strong {
   font-size: 22px;
@@ -128,7 +128,7 @@ html {
   overflow-wrap: anywhere;
 }
 .prose {
-  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-family: var(--font-app);
   font-size: 18px;
   line-height: 1.95;
 }
@@ -176,7 +176,7 @@ html {
   background: #d9c9b8;
   border-radius: 6px;
   color: #6b5545;
-  font-family: Georgia, SimSun, serif;
+  font-family: var(--font-app);
 }
 .story-cover.small {
   width: 27px;
@@ -255,9 +255,7 @@ html {
 }
 .sidebar-footer p {
   font:
-    10px/1.6 "Segoe UI",
-    "Microsoft YaHei",
-    sans-serif;
+    10px/1.6 var(--font-app);
   border-top: 1px solid var(--line);
   padding-top: 16px;
 }

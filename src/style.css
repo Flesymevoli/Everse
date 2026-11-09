@@ -14,9 +14,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font:
-    15px/1.65 "Segoe UI",
-    "Microsoft YaHei",
-    sans-serif;
+    15px/1.65 var(--font-app);
 }
 button,
 input,
@@ -86,8 +84,7 @@ summary:focus-visible {
 }
 .brand {
   font:
-    22px Georgia,
-    serif;
+    22px var(--font-app);
   letter-spacing: -0.6px;
 }
 .brand em {
@@ -164,8 +161,7 @@ summary:focus-visible {
 }
 .sidebar-footer p {
   font:
-    11px Georgia,
-    serif;
+    11px var(--font-app);
   color: var(--muted);
 }
 .reader {
@@ -216,9 +212,7 @@ summary:focus-visible {
   background: #e5d9c8;
   color: #75583f;
   font:
-    24px Georgia,
-    "SimSun",
-    serif;
+    24px var(--font-app);
 }
 .story-panel h2 {
   font-size: 19px;
@@ -348,10 +342,7 @@ summary:focus-visible {
 }
 .book-heading h1 {
   font:
-    400 36px/1.4 "Noto Serif SC",
-    "Songti SC",
-    "SimSun",
-    serif;
+    400 36px/1.4 var(--font-app);
   letter-spacing: 3px;
   margin: 14px 0;
 }
@@ -365,11 +356,7 @@ summary:focus-visible {
 }
 .prose {
   font:
-    19px/2.05 "Noto Serif SC",
-    "Songti SC",
-    "SimSun",
-    Georgia,
-    serif;
+    19px/2.05 var(--font-app);
   letter-spacing: 0.03em;
   overflow-wrap: anywhere;
 }
@@ -383,9 +370,7 @@ summary:focus-visible {
 }
 .action-record {
   font:
-    14px/1.8 "Segoe UI",
-    "Microsoft YaHei",
-    sans-serif;
+    14px/1.8 var(--font-app);
   color: var(--muted);
   padding: 10px 0 10px 16px;
   margin: 28px 0 32px;
@@ -399,7 +384,7 @@ summary:focus-visible {
   position: absolute;
   right: -52px;
   top: 0;
-  font: 11px system-ui;
+  font: 11px var(--font-app);
   color: var(--muted);
   opacity: 0;
   min-height: 32px;
@@ -411,7 +396,7 @@ summary:focus-visible {
   opacity: 1;
 }
 .draft small {
-  font: 12px system-ui;
+  font: 12px var(--font-app);
   color: var(--muted);
 }
 .suggestions {
@@ -495,7 +480,7 @@ summary:focus-visible {
   color: var(--muted);
 }
 .empty-reading > span {
-  font: 48px Georgia;
+  font: 48px var(--font-app);
   color: #c2b4a0;
 }
 .empty-reading p {
@@ -1154,8 +1139,8 @@ pre {
 .save-settings .panel-heading { position: sticky; top: -22px; background: var(--paper); z-index: 1; }
 .composer-preferences { gap: 8px; flex-wrap: wrap; }
 .remember-setting { font-size: 12px; color: var(--muted); }
-.prose .narrative-warning { font: 12px/1.7 "Segoe UI", "Microsoft YaHei", sans-serif; color: var(--muted); padding: 8px 0; }
-.selection-edit { position: fixed; z-index: 12; background: var(--ink); color: var(--paper); box-shadow: 0 4px 18px #30291f30; font: 13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; }
+.prose .narrative-warning { font: 12px/1.7 var(--font-app); color: var(--muted); padding: 8px 0; }
+.selection-edit { position: fixed; z-index: 12; background: var(--ink); color: var(--paper); box-shadow: 0 4px 18px #30291f30; font: 13px/1.5 var(--font-app); }
 .text-editor { width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); margin: auto; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); }
 .text-editor::backdrop { background: #30291f55; }
 .text-editor .panel-heading { position: sticky; top: -22px; background: var(--paper); z-index: 1; }
@@ -1164,7 +1149,7 @@ pre {
 .text-editor small { display: block; color: var(--muted); }
 .restore-edit { font-size: 12px; color: var(--muted); }
 /* Contextual editing stays inside the reading flow, without a backdrop. */
-.inline-text-editor { margin: 4px 0 28px; padding: 12px 14px; width: min(100%, 560px); box-sizing: border-box; background: #fffcf6; border: 1px solid #ded6c8; border-radius: 14px; box-shadow: 0 6px 22px #30291f12; font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; color: var(--ink); overflow-wrap: anywhere; }
+.inline-text-editor { margin: 4px 0 28px; padding: 12px 14px; width: min(100%, 560px); box-sizing: border-box; background: #fffcf6; border: 1px solid #ded6c8; border-radius: 14px; box-shadow: 0 6px 22px #30291f12; font: 14px/1.6 var(--font-app); color: var(--ink); overflow-wrap: anywhere; }
 .inline-edit-heading { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
 .inline-edit-heading .muted { flex: 1; }
 .inline-edit-heading button { flex: none; min-width: 36px; min-height: 36px; padding: 4px; }
@@ -1183,24 +1168,24 @@ pre {
 .prose .inline-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
 .inline-diff del { background: #f4eae4; color: #916d5c; text-decoration: line-through; }
 .inline-diff ins, .edit-added { background: #eddbce; color: #794b36; text-decoration: underline; text-decoration-color: #aa7357; text-underline-offset: 4px; }
-.edit-legend { font: 12px/1.6 "Segoe UI", sans-serif !important; color: var(--muted); margin: 4px 0 8px !important; }
+.edit-legend { font: 12px/1.6 var(--font-app); color: var(--muted); margin: 4px 0 8px !important; }
 .edit-legend span:first-child { color: #916d5c; text-decoration: line-through; }
 .edit-legend span:nth-child(2) { color: #794b36; }
 @media (max-width: 520px) { .inline-text-editor { padding: 10px; } .inline-text-editor button { min-height: 44px; } .inline-edit-heading { flex-wrap: wrap; } }
 .inline-text-editor .inline-edit-details { margin: 6px 0 0; }
 .inline-text-editor .inline-edit-details summary { min-height: 32px; box-sizing: border-box; }
 .inline-text-editor .edit-legend { display: flex; flex-wrap: wrap; gap: 6px; }
-.selection-toolbar { display: inline-flex; align-items: center; gap: 4px; padding: 4px; margin: -12px 0 24px; border: 1px solid var(--line); border-radius: 10px; background: #fffcf6; box-shadow: 0 3px 12px #49352612; font: 13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; }
+.selection-toolbar { display: inline-flex; align-items: center; gap: 4px; padding: 4px; margin: -12px 0 24px; border: 1px solid var(--line); border-radius: 10px; background: #fffcf6; box-shadow: 0 3px 12px #49352612; font: 13px/1.5 var(--font-app); }
 .selection-toolbar button { min-height: 40px; padding: 6px 12px; }
 .edit-side-panel { position: fixed; z-index: 9; top: 72px; right: 0; bottom: 0; width: 400px; margin: 0; padding: 22px; overflow-y: auto; overscroll-behavior: contain; border-radius: 0; border-width: 0 0 0 1px; background: #faf6ef; box-shadow: -4px 0 20px #49352608; }
 .edit-side-panel .inline-edit-heading { flex-wrap: wrap; position: sticky; top: -22px; padding: 12px 0; background: #faf6ef; z-index: 1; }
-.edit-side-panel .inline-edit-heading > span:first-child { font: 600 21px/1.5 Georgia, "Songti SC", serif; width: calc(100% - 50px); }
+.edit-side-panel .inline-edit-heading > span:first-child { font: 600 21px/1.5 var(--font-app); width: calc(100% - 50px); }
 .edit-side-panel .inline-edit-heading .muted { order: 3; flex-basis: 100%; }
 .edit-side-panel .inline-edit-heading button { position: absolute; top: 12px; right: 0; }
 .edit-scope-note { padding: 12px 14px; border: 1px solid #ddc6b7; background: #f2e7dc; border-radius: 9px; margin: 12px 0 18px; font-size: 12px; }
 .edit-scope-note p { margin: 6px 0 0; color: var(--muted); }
 .edit-section-label { display: block; font-size: 12px; font-weight: 600; margin: 14px 0 8px; }
-.edit-before, .edit-after { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; padding: 14px; border: 1px solid #e8ddd2; border-radius: 9px; background: #f8f2e9; font: 15px/1.9 Georgia, "Songti SC", serif; }
+.edit-before, .edit-after { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; padding: 14px; border: 1px solid #e8ddd2; border-radius: 9px; background: #f8f2e9; font: 15px/1.9 var(--font-app); }
 .edit-after { background: #f2e4d6; border-color: #d7b8a4; }
 .edit-side-panel textarea { border: 1px solid #e2d6c9; border-radius: 9px; margin-top: 14px; background: #fffcf7; }
 .edit-side-panel .inline-edit-foot { margin-top: 16px; }
