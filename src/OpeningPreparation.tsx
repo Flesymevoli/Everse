@@ -59,6 +59,7 @@ export function OpeningPreparation({
     const card = characters.find((c) => c.id === session.cardId)?.card,
       world = worlds.find((w) => w.id === session.options.worldId)?.world;
     return {
+      name: session.options.name ?? "",
       characterMode: card ? "existing" : "none",
       worldMode: world ? "existing" : "none",
       cardId: session.cardId,
@@ -82,6 +83,24 @@ export function OpeningPreparation({
     [generating, setGenerating] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (session.options.name !== undefined)
+      setDraft((current) => ({ ...current, name: session.options.name }));
+  }, [session.options.name]);
+  useEffect(() => {
+    if (session.options.presetId !== undefined)
+      setDraft((current) => ({
+        ...current,
+        presetId: session.options.presetId!,
+      }));
+  }, [session.options.presetId]);
+  useEffect(() => {
+    if (session.options.worldbookId !== undefined)
+      setDraft((current) => ({
+        ...current,
+        worldbookId: session.options.worldbookId!,
+      }));
+  }, [session.options.worldbookId]);
   const [presets, setPresets] = useState<{ id: string; name: string }[]>([]),
     [books, setBooks] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -192,6 +211,16 @@ export function OpeningPreparation({
         }}
       >
         <fieldset disabled={working}>
+          <label>
+            存档名称（可选）
+            <input
+              aria-label="存档名称（可选）"
+              maxLength={100}
+              placeholder="给这段故事起个名字"
+              value={draft.name ?? ""}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+          </label>
           <h3>1 · 故事与人物</h3>
           <label>
             {draft.source?.reference
@@ -660,6 +689,7 @@ export function OpeningPreparation({
               onClick={() =>
                 void run(async () => {
                   await api("sessions/" + session.id + "/preparation", draft);
+                  await onStarted();
                   setNotice("准备内容已保存，下次打开存档可继续。");
                 })
               }

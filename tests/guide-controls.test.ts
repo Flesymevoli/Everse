@@ -179,3 +179,34 @@ test("作者行动列表可交互但不把叙事列表误识别，坏格式保�
     [],
   );
 });
+
+test("自定义存档名：保存准备与确认沿用，重命名同步准备而不修改原设定", async () => {
+  const store = new Store(":memory:"),
+    app = createApp(store),
+    id = store.create("", []),
+    path = `/api/sessions/${id}`;
+  try {
+    assert.equal(
+      (
+        await post(app, path + "/preparation", {
+          ...draft,
+          name: "  雨夜第一章  ",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(store.session(id).options.name, "雨夜第一章");
+    assert.equal(store.session(id).options.openingDraft?.name, "雨夜第一章");
+    assert.equal(
+      (await post(app, path + "/options", { name: "桥镇纪事" })).status,
+      200,
+    );
+    const saved = store.session(id).options.openingDraft!;
+    assert.equal(saved.name, "桥镇纪事");
+    assert.deepEqual(saved.source, draft.source);
+    assert.equal((await post(app, path + "/start", saved)).status, 200);
+    assert.equal(store.session(id).options.name, "桥镇纪事");
+  } finally {
+    store.close();
+  }
+});

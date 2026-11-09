@@ -23,6 +23,7 @@ import {
   type Connection,
 } from "./connections";
 import { Management } from "./Management";
+import { SaveSettings } from "./SaveSettings";
 import { visibleStory } from "../shared/story";
 type Work = { id: string; card: Card; warnings: string[] };
 type Save = {
@@ -46,6 +47,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 function App() {
+  const [saveSettings, setSaveSettings] = useState<string | null>(null);
   const [storyPanel, setStoryPanel] = useState(
     () => window.matchMedia("(min-width: 1120px)").matches,
   );
@@ -273,6 +275,7 @@ function App() {
           onRefresh={refresh}
           onLoad={(id) => void action(() => load(id))}
           onCreated={load}
+          onConfigure={setSaveSettings}
           onStart={async (cardId, worldId) => {
             setBusy(true);
             try {
@@ -659,6 +662,18 @@ function App() {
             onClose={() => setStoryPanel(false)}
           />
         </>
+      )}
+      {saveSettings && (
+        <SaveSettings
+          id={saveSettings}
+          disabled={busy}
+          onClose={() => setSaveSettings(null)}
+          onUpdate={async (id) => {
+            await refresh();
+            if (id === session) await load(id);
+            setSaveSettings(id);
+          }}
+        />
       )}
       {settings && (
         <div className="settings-backdrop" onClick={() => setSettings(false)}>

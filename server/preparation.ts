@@ -140,6 +140,7 @@ export function savePreparation(store: Store, id: string, raw: unknown) {
     ...s.options,
     openingState: "preparing",
     openingDraft: d,
+    ...(d.name?.trim() ? { name: d.name.trim() } : {}),
   });
   return d;
 }
@@ -204,7 +205,7 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       storySource: d.source,
       storyTracking: true,
       openingGuide: d.guide,
-      name: s.options.name ?? d.source?.name,
+      name: d.name?.trim() || s.options.name || d.source?.name,
     });
     store.db.prepare("DELETE FROM turn_drafts WHERE sessionId=?").run(id);
     // A new game offers suggestions by default; an explicit saved preference

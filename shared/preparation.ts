@@ -7,6 +7,7 @@ const simple = z.object({
 });
 export const preparationSchema = z
   .object({
+    name: z.string().trim().max(100).optional(),
     guide: openingGuideSchema.optional(),
     source: z
       .object({

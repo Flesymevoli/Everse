@@ -27,6 +27,7 @@ export function Library({
   onLoad,
   onStart,
   onCreated,
+  onConfigure,
 }: {
   characters: Character[];
   worlds: WorldItem[];
@@ -36,6 +37,7 @@ export function Library({
   onRefresh: () => Promise<void>;
   onLoad: (id: string) => void;
   onCreated: (id: string) => Promise<void>;
+  onConfigure: (id: string) => void;
   onStart: (cardId: string, worldId: string) => Promise<void>;
 }) {
   const [playerName, setPlayerName] = useState(""),
@@ -132,16 +134,50 @@ export function Library({
               {s.options?.archived ? " · 已归档" : ""}
             </button>
             <button
-              className="save-rename"
+              className="save-more"
               disabled={locked}
-              aria-label={`重命名 ${s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}`}
-              onClick={() => {
-                setRenaming(s.id);
-                setSaveName(s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`);
+              aria-label={`存档菜单：${s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}`}
+              popoverTarget={`save-menu-${s.id}`}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect(),
+                  menu = document.getElementById(`save-menu-${s.id}`);
+                if (menu) {
+                  menu.style.left = `${Math.max(8, Math.min(r.right - 196, window.innerWidth - 204))}px`;
+                  menu.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 160))}px`;
+                }
               }}
             >
-              改名
+              <span aria-hidden="true">⋯</span>
             </button>
+            <div
+              id={`save-menu-${s.id}`}
+              popover="auto"
+              className="save-menu"
+              aria-label="存档操作"
+            >
+              <p>{s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}</p>
+              <button
+                disabled={locked}
+                onClick={() => {
+                  document.getElementById(`save-menu-${s.id}`)?.hidePopover();
+                  setRenaming(s.id);
+                  setSaveName(
+                    s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`,
+                  );
+                }}
+              >
+                重命名
+              </button>
+              <button
+                disabled={locked}
+                onClick={() => {
+                  document.getElementById(`save-menu-${s.id}`)?.hidePopover();
+                  onConfigure(s.id);
+                }}
+              >
+                存档设置
+              </button>
+            </div>
           </>
         )}
       </div>

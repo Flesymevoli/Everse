@@ -1144,3 +1144,11 @@ pre {
     display: none;
   }
 }
+
+.save-more { flex: none; width: 36px; padding: 4px; font-size: 22px; color: var(--muted); }
+.save-menu { position: fixed; inset: auto; margin: 0; width: 196px; max-width: calc(100vw - 16px); padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fffcf6; color: var(--ink); box-shadow: 0 10px 32px #30291f24; }
+.save-menu p { margin: 4px 8px 6px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.save-menu button { display: block; width: 100%; text-align: left; }
+.save-settings { width: min(660px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); margin: auto; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); }
+.save-settings::backdrop { background: #30291f55; }
+.save-settings .panel-heading { position: sticky; top: -22px; background: var(--paper); z-index: 1; }

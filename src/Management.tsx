@@ -29,12 +29,14 @@ export function Management({
   messages,
   disabled,
   onUpdate,
+  sessionOnly = false,
 }: {
   session: string;
   cardId: string;
   messages: Message[];
   disabled: boolean;
   onUpdate: (id: string) => Promise<void>;
+  sessionOnly?: boolean;
 }) {
   const [editingBook, setEditingBook] = useState<{
     id: string;
@@ -88,7 +90,7 @@ export function Management({
   }
   return (
     <div className="management">
-      <h3>作品资源与聊天管理</h3>
+      {!sessionOnly && <h3>作品资源与聊天管理</h3>}
       {error && (
         <p role="alert" className="error">
           {error}
@@ -96,58 +98,60 @@ export function Management({
       )}
       <p role="status">{notice}</p>
       <fieldset disabled={disabled || working}>
-        {(["worldbooks", "presets"] as const).map((kind) => (
-          <section key={kind}>
-            <label>
-              导入{kind === "worldbooks" ? "世界书" : "Chat Completions 预设"}{" "}
-              JSON
-              <input
-                type="file"
-                accept=".json"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file)
-                    void run(async () => {
-                      if (file.size > 2000000) throw new Error("文件上限 2 MB");
-                      await request(kind, {
-                        name: file.name,
-                        original: JSON.parse(await file.text()),
+        {!sessionOnly &&
+          (["worldbooks", "presets"] as const).map((kind) => (
+            <section key={kind}>
+              <label>
+                导入{kind === "worldbooks" ? "世界书" : "Chat Completions 预设"}{" "}
+                JSON
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file)
+                      void run(async () => {
+                        if (file.size > 2000000)
+                          throw new Error("文件上限 2 MB");
+                        await request(kind, {
+                          name: file.name,
+                          original: JSON.parse(await file.text()),
+                        });
+                        await refresh();
                       });
-                      await refresh();
-                    });
-                }}
-              />
-            </label>
-            {(kind === "worldbooks" ? books : presets).map((asset) => (
-              <details key={asset.id}>
-                <summary>{asset.name}</summary>
-                <a href={"/api/" + kind + "/" + asset.id + "/export"}>
-                  导出 JSON
-                </a>
-                {kind === "worldbooks" && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingBook({
-                        id: asset.id,
-                        name: asset.name,
-                        book: structuredClone(asset.original) as BookDraft,
-                      })
-                    }
-                  >
-                    编辑世界书
-                  </button>
-                )}
-                <ul>
-                  {asset.warnings.map((warning, i) => (
-                    <li key={i}>{warning}</li>
-                  ))}
-                </ul>
-              </details>
-            ))}
-          </section>
-        ))}
+                  }}
+                />
+              </label>
+              {(kind === "worldbooks" ? books : presets).map((asset) => (
+                <details key={asset.id}>
+                  <summary>{asset.name}</summary>
+                  <a href={"/api/" + kind + "/" + asset.id + "/export"}>
+                    导出 JSON
+                  </a>
+                  {kind === "worldbooks" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingBook({
+                          id: asset.id,
+                          name: asset.name,
+                          book: structuredClone(asset.original) as BookDraft,
+                        })
+                      }
+                    >
+                      编辑世界书
+                    </button>
+                  )}
+                  <ul>
+                    {asset.warnings.map((warning, i) => (
+                      <li key={i}>{warning}</li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
+            </section>
+          ))}
         {editingBook && (
           <section aria-label="编辑独立世界书">
             <h3>编辑世界书</h3>
@@ -197,161 +201,9 @@ export function Management({
         ) : (
           <>
             <label>
-              当前存档世界书
-              <select
-                value={options.worldbookId ?? ""}
-                onChange={(e) =>
-                  void run(() => save({ worldbookId: e.target.value || null }))
-                }
-              >
-                <option value="">不绑定独立世界书</option>
-                {books.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              扫描消息数（含本轮输入）
-              <input
-                type="number"
-                min={0}
-                max={1000}
-                value={options.scanDepth ?? 2}
-                onChange={(e) =>
-                  setOptions({ ...options, scanDepth: Number(e.target.value) })
-                }
-              />
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.recursive ?? false}
-                onChange={(e) =>
-                  setOptions({ ...options, recursive: e.target.checked })
-                }
-              />
-              递归扫描世界书
-            </label>
-            <label>
-              递归轮数（0 使用安全上限 500）
-              <input
-                type="number"
-                min={0}
-                max={500}
-                value={options.maxRecursionSteps ?? 0}
-                onChange={(e) =>
-                  setOptions({
-                    ...options,
-                    maxRecursionSteps: Number(e.target.value),
-                  })
-                }
-              />
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.preferCharacterPrompt ?? true}
-                onChange={(e) =>
-                  setOptions({
-                    ...options,
-                    preferCharacterPrompt: e.target.checked,
-                  })
-                }
-              />
-              允许角色主提示词覆盖预设
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={options.preferCharacterInstructions ?? true}
-                onChange={(e) =>
-                  setOptions({
-                    ...options,
-                    preferCharacterInstructions: e.target.checked,
-                  })
-                }
-              />
-              允许角色历史后指令覆盖预设
-            </label>
-            <label>
-              当前存档预设
-              <select
-                value={options.presetId ?? ""}
-                onChange={(e) =>
-                  void run(() => save({ presetId: e.target.value || null }))
-                }
-              >
-                <option value="">沿用基础编排</option>
-                {presets.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="muted">
-              采样覆盖按存档保存；留空使用预设或供应商默认值。预设的上下文/回复上限优先于基础设置。
-            </p>
-            {(
-              [
-                "temperature",
-                "top_p",
-                "frequency_penalty",
-                "presence_penalty",
-                "seed",
-              ] as const
-            ).map((key) => (
-              <label key={key}>
-                {key}
-                <input
-                  type="number"
-                  step={key === "seed" ? 1 : 0.1}
-                  value={options.parameters?.[key] ?? ""}
-                  onChange={(e) => {
-                    const parameters = { ...options.parameters };
-                    if (e.target.value === "") delete parameters[key];
-                    else parameters[key] = Number(e.target.value);
-                    setOptions({ ...options, parameters });
-                  }}
-                />
-              </label>
-            ))}
-            <label>
-              停止词（每行一项，最多 4 项）
-              <textarea
-                value={options.parameters?.stop?.join("\n") ?? ""}
-                onChange={(e) => {
-                  const parameters = { ...options.parameters };
-                  if (e.target.value)
-                    parameters.stop = e.target.value.split("\n");
-                  else delete parameters.stop;
-                  setOptions({ ...options, parameters });
-                }}
-              />
-            </label>
-            <button
-              onClick={() =>
-                void run(() =>
-                  save({
-                    parameters: options.parameters ?? {},
-                    scanDepth: options.scanDepth ?? 2,
-                    recursive: options.recursive ?? false,
-                    maxRecursionSteps: options.maxRecursionSteps ?? 0,
-                    preferCharacterPrompt:
-                      options.preferCharacterPrompt ?? true,
-                    preferCharacterInstructions:
-                      options.preferCharacterInstructions ?? true,
-                  }),
-                )
-              }
-            >
-              保存扫描与模型参数
-            </button>
-            <label>
               存档名称
               <input
+                maxLength={100}
                 value={options.name ?? ""}
                 onChange={(e) =>
                   setOptions({ ...options, name: e.target.value })
@@ -359,82 +211,251 @@ export function Management({
               />
             </label>
             <button
+              disabled={!options.name?.trim()}
               onClick={() => void run(() => save({ name: options.name }))}
             >
               保存名称
             </button>
-            <button
-              onClick={() =>
-                void run(() => save({ archived: !options.archived }))
-              }
-            >
-              {options.archived ? "恢复存档" : "归档存档（保留数据）"}
-            </button>
-            <p>
-              <a href={"/api/sessions/" + session + "/export"}>导出 ST JSONL</a>
-            </p>
-            <label>
-              消息序号
-              <input
-                type="number"
-                min={1}
-                max={messages.length}
-                value={index + 1}
-                onChange={(e) => {
-                  const next = Number(e.target.value) - 1;
-                  setIndex(next);
-                  setContent(messages[next]?.content ?? "");
-                }}
-              />
-            </label>
-            <button onClick={() => setContent(messages[index]?.content ?? "")}>
-              读取消息原文
-            </button>
-            <label>
-              编辑消息
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-              />
-            </label>
-            <button
-              disabled={!messages[index]}
-              onClick={() =>
-                void run(async () => {
-                  await request("sessions/" + session + "/edit", {
-                    index,
-                    content,
-                  });
-                  await onUpdate(session);
-                })
-              }
-            >
-              保存编辑（可撤销）
-            </button>
-            <button
-              onClick={() =>
-                void run(async () => {
-                  await request("sessions/" + session + "/undo", {});
-                  await onUpdate(session);
-                })
-              }
-            >
-              撤销最近一次编辑
-            </button>
-            <button
-              disabled={!messages[index]}
-              onClick={() =>
-                void run(async () => {
-                  const result = await request<{ id: string }>(
-                    "sessions/" + session + "/branch",
-                    { count: index + 1 },
-                  );
-                  await onUpdate(result.id);
-                })
-              }
-            >
-              从此消息创建分支
-            </button>
+            <details open>
+              <summary>世界书、预设与模型参数</summary>
+              <label>
+                当前存档世界书
+                <select
+                  value={options.worldbookId ?? ""}
+                  onChange={(e) =>
+                    void run(() =>
+                      save({ worldbookId: e.target.value || null }),
+                    )
+                  }
+                >
+                  <option value="">不绑定独立世界书</option>
+                  {books.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                扫描消息数（含本轮输入）
+                <input
+                  type="number"
+                  min={0}
+                  max={1000}
+                  value={options.scanDepth ?? 2}
+                  onChange={(e) =>
+                    setOptions({
+                      ...options,
+                      scanDepth: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={options.recursive ?? false}
+                  onChange={(e) =>
+                    setOptions({ ...options, recursive: e.target.checked })
+                  }
+                />
+                递归扫描世界书
+              </label>
+              <label>
+                递归轮数（0 使用安全上限 500）
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  value={options.maxRecursionSteps ?? 0}
+                  onChange={(e) =>
+                    setOptions({
+                      ...options,
+                      maxRecursionSteps: Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={options.preferCharacterPrompt ?? true}
+                  onChange={(e) =>
+                    setOptions({
+                      ...options,
+                      preferCharacterPrompt: e.target.checked,
+                    })
+                  }
+                />
+                允许角色主提示词覆盖预设
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={options.preferCharacterInstructions ?? true}
+                  onChange={(e) =>
+                    setOptions({
+                      ...options,
+                      preferCharacterInstructions: e.target.checked,
+                    })
+                  }
+                />
+                允许角色历史后指令覆盖预设
+              </label>
+              <label>
+                当前存档预设
+                <select
+                  value={options.presetId ?? ""}
+                  onChange={(e) =>
+                    void run(() => save({ presetId: e.target.value || null }))
+                  }
+                >
+                  <option value="">沿用基础编排</option>
+                  {presets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="muted">
+                采样覆盖按存档保存；留空使用预设或供应商默认值。预设的上下文/回复上限优先于基础设置。
+              </p>
+              {(
+                [
+                  "temperature",
+                  "top_p",
+                  "frequency_penalty",
+                  "presence_penalty",
+                  "seed",
+                ] as const
+              ).map((key) => (
+                <label key={key}>
+                  {key}
+                  <input
+                    type="number"
+                    step={key === "seed" ? 1 : 0.1}
+                    value={options.parameters?.[key] ?? ""}
+                    onChange={(e) => {
+                      const parameters = { ...options.parameters };
+                      if (e.target.value === "") delete parameters[key];
+                      else parameters[key] = Number(e.target.value);
+                      setOptions({ ...options, parameters });
+                    }}
+                  />
+                </label>
+              ))}
+              <label>
+                停止词（每行一项，最多 4 项）
+                <textarea
+                  value={options.parameters?.stop?.join("\n") ?? ""}
+                  onChange={(e) => {
+                    const parameters = { ...options.parameters };
+                    if (e.target.value)
+                      parameters.stop = e.target.value.split("\n");
+                    else delete parameters.stop;
+                    setOptions({ ...options, parameters });
+                  }}
+                />
+              </label>
+              <button
+                onClick={() =>
+                  void run(() =>
+                    save({
+                      parameters: options.parameters ?? {},
+                      scanDepth: options.scanDepth ?? 2,
+                      recursive: options.recursive ?? false,
+                      maxRecursionSteps: options.maxRecursionSteps ?? 0,
+                      preferCharacterPrompt:
+                        options.preferCharacterPrompt ?? true,
+                      preferCharacterInstructions:
+                        options.preferCharacterInstructions ?? true,
+                    }),
+                  )
+                }
+              >
+                保存扫描与模型参数
+              </button>
+            </details>
+            <details>
+              <summary>聊天记录与存档管理</summary>
+              <button
+                onClick={() =>
+                  void run(() => save({ archived: !options.archived }))
+                }
+              >
+                {options.archived ? "恢复存档" : "归档存档（保留数据）"}
+              </button>
+              <p>
+                <a href={"/api/sessions/" + session + "/export"}>
+                  导出 ST JSONL
+                </a>
+              </p>
+              <label>
+                消息序号
+                <input
+                  type="number"
+                  min={1}
+                  max={messages.length}
+                  value={index + 1}
+                  onChange={(e) => {
+                    const next = Number(e.target.value) - 1;
+                    setIndex(next);
+                    setContent(messages[next]?.content ?? "");
+                  }}
+                />
+              </label>
+              <button
+                onClick={() => setContent(messages[index]?.content ?? "")}
+              >
+                读取消息原文
+              </button>
+              <label>
+                编辑消息
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                />
+              </label>
+              <button
+                disabled={!messages[index]}
+                onClick={() =>
+                  void run(async () => {
+                    await request("sessions/" + session + "/edit", {
+                      index,
+                      content,
+                    });
+                    await onUpdate(session);
+                  })
+                }
+              >
+                保存编辑（可撤销）
+              </button>
+              <button
+                onClick={() =>
+                  void run(async () => {
+                    await request("sessions/" + session + "/undo", {});
+                    await onUpdate(session);
+                  })
+                }
+              >
+                撤销最近一次编辑
+              </button>
+              <button
+                disabled={!messages[index]}
+                onClick={() =>
+                  void run(async () => {
+                    const result = await request<{ id: string }>(
+                      "sessions/" + session + "/branch",
+                      { count: index + 1 },
+                    );
+                    await onUpdate(result.id);
+                  })
+                }
+              >
+                从此消息创建分支
+              </button>
+            </details>
           </>
         )}
         {cardId && (

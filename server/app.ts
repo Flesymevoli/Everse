@@ -489,7 +489,25 @@ export function createApp(
       options.worldId === null
     )
       throw new Error("纯世界存档必须保留世界书");
-    store.setOptions(id, { ...store.options(id), ...options });
+    const previous = store.options(id);
+    store.setOptions(id, {
+      ...previous,
+      ...options,
+      ...(previous.openingDraft
+        ? {
+            openingDraft: {
+              ...previous.openingDraft,
+              ...(options.name !== undefined ? { name: options.name } : {}),
+              ...(options.presetId !== undefined
+                ? { presetId: options.presetId }
+                : {}),
+              ...(options.worldbookId !== undefined
+                ? { worldbookId: options.worldbookId }
+                : {}),
+            },
+          }
+        : {}),
+    });
     return c.json(store.options(id));
   });
   app.post("/api/sessions/import", async (c) => {
