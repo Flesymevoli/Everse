@@ -1,3 +1,6 @@
+import { ConnectionVault } from "./connection-vault.js";
+import { windowsProtector, type SecretProtector } from "./secrets.js";
+import { importWorld, combinedCard } from "./worlds.js";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { stream } from "hono/streaming";
@@ -23,6 +26,7 @@ const turn = z.object({
   input: z.string().trim().max(20000).default(""),
   budget: z.number().int().min(2048).max(128000).default(8192),
   reserve: z.number().int().min(64).max(8192).default(1024),
+  connectionId: z.string().min(1).max(100).optional(),
   config: z.object({
     baseUrl: z.string().url(),
     apiKey: z.string().max(4096),
@@ -31,12 +35,27 @@ const turn = z.object({
     parameters: parametersSchema.optional(),
   }),
 });
-export function createApp(store: Store) {
+export function createApp(
+  store: Store,
+  protector: SecretProtector = windowsProtector,
+) {
+  const vault = new ConnectionVault(store, protector);
   const app = new Hono();
   const busy = new Set<string>();
   const controllers = new Map<string, AbortController>();
   app.use("*", bodyLimit({ maxSize: 2 * 1024 * 1024 }));
   app.use("*", async (c, next) => {
+    const host = (c.req.header("host") ?? new URL(c.req.url).host).split(
+      ":",
+    )[0];
+    if (!["localhost", "127.0.0.1"].includes(host))
+      return c.json({ error: "来源不允许" }, 403);
+    if (
+      c.req.path.startsWith("/api/connections") &&
+      c.req.method === "POST" &&
+      !c.req.header("content-type")?.startsWith("application/json")
+    )
+      return c.json({ error: "需要 JSON 请求" }, 415);
     const origin = c.req.header("origin");
     if (
       origin &&
@@ -51,6 +70,31 @@ export function createApp(store: Store) {
       400,
     ),
   );
+  app.get("/api/connections", (c) => c.json(vault.list()));
+  app.post("/api/connections", async (c) =>
+    c.json(await vault.save(await c.req.json())),
+  );
+  app.post("/api/connections/:id/delete", (c) => {
+    vault.delete(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+  app.post("/api/connections/:id/clear-key", (c) => {
+    vault.clearKey(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+  app.get("/api/worlds", (c) => c.json(store.worlds()));
+  app.post("/api/worlds", async (c) => {
+    const body = z
+      .object({ original: z.unknown(), name: z.string().max(100).optional() })
+      .parse(await c.req.json());
+    const value = importWorld(body.original, body.name);
+    return c.json({ id: store.addWorld(value), ...value });
+  });
+  app.get("/api/worlds/:id/export", (c) => {
+    const w = store.worlds().find((w) => w.id === c.req.param("id"));
+    if (!w) return c.json({ error: "世界卡不存在" }, 404);
+    return c.json(w.original);
+  });
   app.get("/api/cards", (c) => c.json(store.cards()));
   for (const kind of ["worldbooks", "presets"] as const) {
     app.get("/api/" + kind, (c) => c.json(store.assets(kind)));
@@ -85,6 +129,7 @@ export function createApp(store: Store) {
     const options = optionsSchema.parse(await c.req.json());
     if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
     for (const [key, kind] of [
+      ["worldId", "worlds"],
       ["worldbookId", "worldbooks"],
       ["presetId", "presets"],
     ] as const) {
@@ -94,6 +139,8 @@ export function createApp(store: Store) {
       )
         throw new Error("绑定资源不存在");
     }
+    if (!store.session(id).cardId && options.worldId === null)
+      throw new Error("纯世界存档必须保留世界卡");
     store.setOptions(id, { ...store.options(id), ...options });
     return c.json(store.options(id));
   });
@@ -115,16 +162,21 @@ export function createApp(store: Store) {
   app.get("/api/sessions/:id/export", (c) => {
     const session = store.session(c.req.param("id"));
     const card = store.cards().find((card) => card.id === session.cardId);
+    const exportName =
+      card?.card.data.name ??
+      store.worlds().find((w) => w.id === session.options.worldId)?.world.data
+        .name ??
+      "";
     c.header("Content-Disposition", 'attachment; filename="chat.jsonl"');
     return c.text(
       exportChat(
         session.messages,
         session.options.chatHeader ?? {
           user_name: "玩家",
-          character_name: card?.card.data.name ?? "",
+          character_name: exportName,
           chat_metadata: {},
         },
-        card?.card.data.name ?? "",
+        exportName,
       ),
     );
   });
@@ -198,6 +250,29 @@ export function createApp(store: Store) {
       );
     return c.json({ id: store.addCard(result), ...result });
   });
+  app.post("/api/cards/:id/edit", async (c) => {
+    const patch = z
+      .object({
+        name: z.string().trim().min(1).max(100).optional(),
+        description: z.string().max(100000).optional(),
+        personality: z.string().max(100000).optional(),
+        scenario: z.string().max(100000).optional(),
+        first_mes: z.string().max(100000).optional(),
+      })
+      .strict()
+      .parse(await c.req.json());
+    const id = c.req.param("id");
+    const item = store.cards().find((x) => x.id === id);
+    if (!item) throw new Error("角色卡不存在");
+    if (store.sessions().some((s) => s.cardId === id && busy.has(String(s.id))))
+      return c.json({ error: "相关存档正在生成，请稍后修改" }, 409);
+    const raw = (item.original ?? item.card) as Record<string, unknown> & {
+      data: Record<string, unknown>;
+    };
+    const updated = importCard({ ...raw, data: { ...raw.data, ...patch } });
+    store.updateCard(id, updated);
+    return c.json({ id, ...updated });
+  });
   app.get("/api/cards/:id/export", (c) => {
     const item = store.cards().find((x) => x.id === c.req.param("id"));
     if (!item) return c.json({ error: "作品不存在" }, 404);
@@ -210,24 +285,26 @@ export function createApp(store: Store) {
   });
   app.get("/api/sessions", (c) => c.json(store.sessions()));
   app.post("/api/sessions", async (c) => {
-    const { cardId } = z
-      .object({ cardId: z.string() })
+    const { cardId, worldId } = z
+      .object({
+        cardId: z.string().default(""),
+        worldId: z.string().optional(),
+      })
       .parse(await c.req.json());
     const item = store.cards().find((x) => x.id === cardId);
-    if (!item) throw new Error("作品不存在");
-    return c.json({
-      id: store.create(
-        cardId,
-        item.card.data.first_mes
-          ? [
-              {
-                role: "assistant",
-                content: expand(item.card.data.first_mes, item.card.data.name),
-              },
-            ]
-          : [],
-      ),
-    });
+    const world = store.worlds().find((x) => x.id === worldId);
+    if (cardId && !item) throw new Error("角色卡不存在");
+    if (worldId && !world) throw new Error("世界卡不存在");
+    const card = combinedCard(item?.card, world?.world);
+    const opening = world?.world.data.first_mes || card.data.first_mes;
+    const id = store.create(
+      cardId,
+      opening
+        ? [{ role: "assistant", content: expand(opening, card.data.name) }]
+        : [],
+    );
+    if (worldId) store.setOptions(id, { worldId });
+    return c.json({ id });
   });
   app.get("/api/sessions/:id", (c) => c.json(store.session(c.req.param("id"))));
   app.post("/api/sessions/:id/greeting", async (c) => {
@@ -286,9 +363,14 @@ export function createApp(store: Store) {
     const id = c.req.param("id");
     if (busy.has(id)) return c.json({ error: "该存档正在生成" }, 409);
     const body = turn.parse(await c.req.json());
+    if (body.connectionId && !body.config.mock)
+      body.config = await vault.config(body.connectionId);
     const session = store.session(id);
     const item = store.cards().find((x) => x.id === session.cardId);
-    if (!item) throw new Error("作品不存在");
+    const worldCard = store
+      .worlds()
+      .find((w) => w.id === session.options.worldId);
+    const runtimeCard = combinedCard(item?.card, worldCard?.world);
     if (session.options.archived) throw new Error("请先恢复归档的聊天");
     const worldbook = store
       .assets("worldbooks")
@@ -321,7 +403,9 @@ export function createApp(store: Store) {
       input = history.at(-2)!.content;
       history = history.slice(0, -2);
     } else if (!input) throw new Error("请输入内容");
-    const prompt = buildContext(item.card, history, input, budget, reserve, {
+    const prompt = buildContext(runtimeCard, history, input, budget, reserve, {
+      worldDescription: worldCard?.world.data.description,
+      cardWorldbook: worldCard?.world.data.worldbook,
       worldbook: worldbook?.original,
       preset: presetAsset?.original,
       ...session.options,

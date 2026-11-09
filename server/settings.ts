@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parametersSchema } from "./preset.js";
 export const optionsSchema = z
   .object({
+    worldId: z.string().nullable().optional(),
     recursive: z.boolean().optional(),
     maxRecursionSteps: z.number().int().min(0).max(500).optional(),
     preferCharacterPrompt: z.boolean().optional(),

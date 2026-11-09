@@ -20,6 +20,24 @@ export class Store {
       "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS preferences(id TEXT PRIMARY KEY, suggestions INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS cards(id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, cardId TEXT NOT NULL, messages TEXT NOT NULL);",
     );
   }
+  worlds() {
+    return this.db
+      .prepare("SELECT * FROM assets WHERE kind='worlds'")
+      .all()
+      .map((r) => ({
+        id: String(r.id),
+        ...(JSON.parse(String(r.body)) as ReturnType<
+          typeof import("./worlds.js").importWorld
+        >),
+      }));
+  }
+  addWorld(value: ReturnType<typeof import("./worlds.js").importWorld>) {
+    const id = randomUUID();
+    this.db
+      .prepare("INSERT INTO assets VALUES (?,?,?,?)")
+      .run(id, "worlds", value.world.data.name, JSON.stringify(value));
+    return id;
+  }
   cards() {
     return this.db
       .prepare("SELECT * FROM cards")
@@ -40,11 +58,38 @@ export class Store {
       .run(id, JSON.stringify(value));
     return id;
   }
+  updateCard(
+    id: string,
+    value: ReturnType<typeof import("./cards.js").importCard>,
+  ) {
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS card_revisions(id INTEGER PRIMARY KEY,cardId TEXT NOT NULL,body TEXT NOT NULL)",
+    );
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const old = this.db.prepare("SELECT body FROM cards WHERE id=?").get(id);
+      if (!old) throw new Error("角色卡不存在");
+      this.db
+        .prepare("INSERT INTO card_revisions(cardId,body) VALUES (?,?)")
+        .run(id, old.body);
+      this.db
+        .prepare("UPDATE cards SET body=? WHERE id=?")
+        .run(JSON.stringify(value), id);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   sessions() {
     return this.db
       .prepare("SELECT id,cardId FROM sessions")
       .all()
-      .map((row) => ({ ...row, options: this.options(String(row.id)) }));
+      .map((row) => ({
+        id: String(row.id),
+        cardId: String(row.cardId),
+        options: this.options(String(row.id)),
+      }));
   }
   assets(kind: string) {
     return this.db

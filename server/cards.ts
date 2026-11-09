@@ -73,7 +73,7 @@ export function importCard(raw: unknown) {
     "世界书仅扫描最近 6 条消息，按原顺序插入系统上下文；不执行脚本或 HTML",
   );
   warnings.push(
-    "备选开场仅支持单人存档首轮前选择；未实现通用 Swipe 和群聊随机开场",
+    "备选开场仅支持单人存档首轮前选择；回复 Swipe 已支持基础切换，群聊随机开场未实现",
   );
   return { card, warnings, original: structuredClone(raw) };
 }

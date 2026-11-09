@@ -22,6 +22,8 @@ export function buildContext(
   budget = 8192,
   reserve = 1024,
   options: {
+    worldDescription?: string;
+    cardWorldbook?: unknown;
     worldbook?: unknown;
     preset?: unknown;
     scanDepth?: number;
@@ -45,6 +47,22 @@ export function buildContext(
         injections: [],
         failedProbability: [],
       };
+  if (options.cardWorldbook) {
+    const additional = evaluateBook(
+      options.cardWorldbook,
+      history,
+      input,
+      options.scanDepth,
+      { ...options, expand: (text) => expand(text, data.name) },
+    );
+    world.before.push(...additional.before);
+    world.after.push(...additional.after);
+    world.injections.push(...additional.injections);
+    world.matched.push(...additional.matched.map((id) => "world:" + id));
+    world.failedProbability.push(
+      ...additional.failedProbability.map((id) => "world:" + id),
+    );
+  }
   const scan = [...history.slice(-6).map((m) => m.content), input].join("\n");
   const entries = (data.character_book?.entries ?? []).filter(
     (e) =>
@@ -97,11 +115,25 @@ export function buildContext(
         });
       if (boundary < chat.length) injected.push(chat[boundary]);
     }
+    const worldDescription: Message[] = options.worldDescription
+      ? [
+          {
+            role: "system",
+            content: expand(options.worldDescription, data.name),
+          },
+        ]
+      : [];
     const extra: Message[] = options.extraInstruction
       ? [{ role: "system", content: options.extraInstruction }]
       : [];
     if (!preset?.prompts)
-      return [system, ...injected, ...tail.slice(1), ...extra];
+      return [
+        ...worldDescription,
+        system,
+        ...injected,
+        ...tail.slice(1),
+        ...extra,
+      ];
     const order =
       preset.prompt_order?.find((value) => value.character_id === 100001)
         ?.order ?? [];
@@ -121,7 +153,7 @@ export function buildContext(
       ],
       chatHistory: injected,
     };
-    const result: Message[] = [];
+    const result: Message[] = [...worldDescription];
     for (const item of order.filter((item) => item.enabled)) {
       const prompt = preset.prompts.find(
         (prompt) => prompt.identifier === item.identifier,
