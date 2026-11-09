@@ -276,8 +276,8 @@ export function Library({
         ＋ 新建存档
       </button>
       {saves.some((s) => !s.cardId && !s.options?.worldId) && (
-        <section aria-label="待开局存档">
-          <h3>待开局</h3>
+        <section aria-label="独立故事存档">
+          <h3>我的故事</h3>
           {saveButtons(saves.filter((s) => !s.cardId && !s.options?.worldId))}
         </section>
       )}

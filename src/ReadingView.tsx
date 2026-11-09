@@ -1,6 +1,7 @@
 import { variantsOf, activeVariant } from "../shared/swipes";
 import type { Message } from "../server/context";
 import { readingDraft } from "../server/suggestions";
+import { visibleStory } from "../shared/story";
 
 interface Props {
   busy: boolean;
@@ -28,8 +29,9 @@ export function ReadingView({
     !generating && suggestionsEnabled
       ? (messages.at(-1)?.suggestions ?? [])
       : [];
-  const visibleDraft =
-    suggestionsEnabled && generating ? readingDraft(draft) : draft;
+  const visibleDraft = visibleStory(
+    suggestionsEnabled && generating ? readingDraft(draft) : draft,
+  );
   return (
     <>
       <section className="prose" aria-label="小说正文">

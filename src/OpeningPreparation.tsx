@@ -7,6 +7,8 @@ import { type Preparation } from "../shared/preparation";
 import { readPlayer } from "../shared/player";
 import { expand } from "../shared/character-text";
 export type PreparingSession = {
+  story?: import("../shared/story").StoryView;
+  draft?: { raw: string; input: string; error: string } | null;
   id: string;
   cardId: string;
   options: SessionOptions;
@@ -52,7 +54,7 @@ export function OpeningPreparation({
       world = worlds.find((w) => w.id === session.options.worldId)?.world;
     return {
       characterMode: card ? "existing" : "none",
-      worldMode: world ? "existing" : card ? "none" : "simple",
+      worldMode: world ? "existing" : "none",
       cardId: session.cardId,
       worldId: session.options.worldId ?? "",
       character: { name: "", description: "" },
@@ -67,6 +69,7 @@ export function OpeningPreparation({
         "",
       presetId: session.options.presetId ?? null,
       worldbookId: session.options.worldbookId ?? null,
+      source: session.options.storySource,
     };
   });
   const [working, setWorking] = useState(false),
@@ -141,8 +144,7 @@ export function OpeningPreparation({
     <section className="settings opening-preparation" aria-label="开局准备">
       <h2>开局准备</h2>
       <p>
-        先确定角色、玩家身份和第一幕。确认开始后才进入自由互动，不会自动调用
-        AI。
+        从一个念头开始，几个字也可以。有作者开场时可直接预览；没有时再生成。身份和详细设定都可跳过。
       </p>
       {error && (
         <p role="alert" className="error">
@@ -162,149 +164,212 @@ export function OpeningPreparation({
         <fieldset disabled={working}>
           <h3>1 · 故事与人物</h3>
           <label>
-            故事中的角色
-            <select
-              value={
-                draft.characterMode === "existing"
-                  ? draft.cardId
-                  : draft.characterMode
-              }
-              onChange={(e) => {
-                const v = e.target.value;
-                setDraft({
-                  ...draft,
-                  characterMode:
-                    v === "simple" || v === "none" ? v : "existing",
-                  cardId: v === "simple" || v === "none" ? "" : v,
-                });
-              }}
-            >
-              <option value="none">暂不指定角色</option>
-              <option value="simple">自行创建简单角色</option>
-              {characters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.card.data.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {draft.characterMode === "simple" && (
-            <>
-              <label>
-                角色名字（可选）
-                <input
-                  maxLength={100}
-                  value={draft.character.name}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      character: { ...draft.character, name: e.target.value },
-                    })
-                  }
-                />
-              </label>
-              <label>
-                角色设定
-                <textarea
-                  maxLength={100000}
-                  value={draft.character.description}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      character: {
-                        ...draft.character,
-                        description: e.target.value,
-                      },
-                    })
-                  }
-                  placeholder="例如：住在海边的守灯人，记得每一艘返航的船。"
-                />
-              </label>
-            </>
-          )}
-          <label>
-            世界设定
-            <select
-              value={
-                draft.worldMode === "existing" ? draft.worldId : draft.worldMode
-              }
-              onChange={(e) => {
-                const v = e.target.value;
-                setDraft({
-                  ...draft,
-                  worldMode: v === "simple" || v === "none" ? v : "existing",
-                  worldId: v === "simple" || v === "none" ? "" : v,
-                });
-              }}
-            >
-              <option value="none">使用角色卡背景</option>
-              <option value="simple">自行创建简单世界</option>
-              {worlds.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.world.data.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {draft.worldMode === "simple" && (
-            <>
-              <label>
-                世界名称（可选）
-                <input
-                  maxLength={100}
-                  value={draft.world.name}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      world: { ...draft.world, name: e.target.value },
-                    })
-                  }
-                />
-              </label>
-              <label>
-                背景设定
-                <textarea
-                  maxLength={100000}
-                  value={draft.world.description}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      world: { ...draft.world, description: e.target.value },
-                    })
-                  }
-                  placeholder="例如：雨城的书店只在深夜开门。"
-                />
-              </label>
-            </>
-          )}
-          <h3>2 · 我在故事中是谁？</h3>
-          <label>
-            玩家称呼（可选）
-            <input
-              maxLength={100}
-              value={draft.player.name}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  player: { ...draft.player, name: e.target.value },
-                })
-              }
-            />
-          </label>
-          <label>
-            玩家人设（可选）
+            你想进入怎样的故事？（已有作品可留空）
             <textarea
-              maxLength={10000}
-              value={draft.player.description}
+              aria-label="故事设定"
+              maxLength={100000}
+              placeholder="例如：雨城侦探"
+              value={draft.source?.text ?? ""}
               onChange={(e) =>
                 setDraft({
                   ...draft,
-                  player: { ...draft.player, description: e.target.value },
+                  source: {
+                    name: draft.source?.name ?? "我的故事",
+                    format: "text",
+                    text: e.target.value,
+                  },
                 })
               }
-              placeholder="留空也可以。这些信息仅用于当前存档，不会修改原角色卡。"
             />
           </label>
+          <label className="import">
+            导入文本设定（TXT / Markdown）
+            <input
+              type="file"
+              accept=".txt,.md"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                void run(async () => {
+                  if (file.size > 400000)
+                    throw new Error("文本文件请限制在 400 KB 内");
+                  const text = await file.text();
+                  if (text.length > 100000 || text.includes("\uFFFD"))
+                    throw new Error(
+                      "请使用不超过10万字的 UTF-8 文本；当前文件过长或编码无法识别",
+                    );
+                  setDraft({
+                    ...draft,
+                    source: {
+                      name: file.name.slice(0, 100),
+                      format: file.name.toLowerCase().endsWith(".md")
+                        ? "md"
+                        : "txt",
+                      text,
+                    },
+                  });
+                });
+              }}
+            />
+          </label>
+          <details
+            open={
+              draft.characterMode === "existing" ||
+              draft.worldMode === "existing" ||
+              undefined
+            }
+          >
+            <summary>已有角色卡、世界书与详细设定（可选）</summary>
+            <label>
+              故事中的角色
+              <select
+                value={
+                  draft.characterMode === "existing"
+                    ? draft.cardId
+                    : draft.characterMode
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDraft({
+                    ...draft,
+                    characterMode:
+                      v === "simple" || v === "none" ? v : "existing",
+                    cardId: v === "simple" || v === "none" ? "" : v,
+                  });
+                }}
+              >
+                <option value="none">暂不指定角色</option>
+                <option value="simple">自行创建简单角色</option>
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.card.data.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {draft.characterMode === "simple" && (
+              <>
+                <label>
+                  角色名字（可选）
+                  <input
+                    maxLength={100}
+                    value={draft.character.name}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        character: { ...draft.character, name: e.target.value },
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  角色设定
+                  <textarea
+                    maxLength={100000}
+                    value={draft.character.description}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        character: {
+                          ...draft.character,
+                          description: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="例如：住在海边的守灯人，记得每一艘返航的船。"
+                  />
+                </label>
+              </>
+            )}
+            <label>
+              世界设定
+              <select
+                value={
+                  draft.worldMode === "existing"
+                    ? draft.worldId
+                    : draft.worldMode
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDraft({
+                    ...draft,
+                    worldMode: v === "simple" || v === "none" ? v : "existing",
+                    worldId: v === "simple" || v === "none" ? "" : v,
+                  });
+                }}
+              >
+                <option value="none">使用角色卡背景</option>
+                <option value="simple">自行创建简单世界</option>
+                {worlds.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.world.data.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {draft.worldMode === "simple" && (
+              <>
+                <label>
+                  世界名称（可选）
+                  <input
+                    maxLength={100}
+                    value={draft.world.name}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        world: { ...draft.world, name: e.target.value },
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  背景设定
+                  <textarea
+                    maxLength={100000}
+                    value={draft.world.description}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        world: { ...draft.world, description: e.target.value },
+                      })
+                    }
+                    placeholder="例如：雨城的书店只在深夜开门。"
+                  />
+                </label>
+              </>
+            )}
+          </details>
+          <details>
+            <summary>我在故事中是谁？（可选）</summary>
+            <label>
+              玩家称呼（可选）
+              <input
+                maxLength={100}
+                value={draft.player.name}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    player: { ...draft.player, name: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <label>
+              玩家人设（可选）
+              <textarea
+                maxLength={10000}
+                value={draft.player.description}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    player: { ...draft.player, description: e.target.value },
+                  })
+                }
+                placeholder="留空也可以。这些信息仅用于当前存档，不会修改原角色卡。"
+              />
+            </label>
+          </details>
           <details>
             <summary>预设与独立世界书（可选）</summary>
             <label>
