@@ -38,6 +38,30 @@ export class Store {
       .run(id, "worlds", value.world.data.name, JSON.stringify(value));
     return id;
   }
+  updateAsset(id: string, kind: string, name: string, value: unknown) {
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS asset_revisions(id INTEGER PRIMARY KEY,assetId TEXT NOT NULL,name TEXT NOT NULL,body TEXT NOT NULL)",
+    );
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const old = this.db
+        .prepare("SELECT name,body FROM assets WHERE id=? AND kind=?")
+        .get(id, kind);
+      if (!old) throw new Error("资源不存在");
+      this.db
+        .prepare(
+          "INSERT INTO asset_revisions(assetId,name,body) VALUES (?,?,?)",
+        )
+        .run(id, old.name, old.body);
+      this.db
+        .prepare("UPDATE assets SET name=?,body=? WHERE id=? AND kind=?")
+        .run(name, JSON.stringify(value), id, kind);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   cards() {
     return this.db
       .prepare("SELECT * FROM cards")

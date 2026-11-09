@@ -1,3 +1,4 @@
+import { editWorld } from "./world-edit.js";
 import { ConnectionVault } from "./connection-vault.js";
 import { windowsProtector, type SecretProtector } from "./secrets.js";
 import { importWorld, combinedCard } from "./worlds.js";
@@ -90,9 +91,41 @@ export function createApp(
     const value = importWorld(body.original, body.name);
     return c.json({ id: store.addWorld(value), ...value });
   });
+  app.post("/api/worlds/:id/edit", async (c) => {
+    const body = await c.req.json();
+    const id = c.req.param("id");
+    const item = store.worlds().find((w) => w.id === id);
+    if (!item) throw new Error("世界书不存在");
+    if (
+      store.sessions().some((s) => s.options.worldId === id && busy.has(s.id))
+    )
+      return c.json({ error: "相关存档正在生成，请稍后修改" }, 409);
+    const updated = editWorld(item, body);
+    store.updateAsset(id, "worlds", updated.world.data.name, updated);
+    return c.json({ id, ...updated });
+  });
+  app.post("/api/worldbooks/:id/edit", async (c) => {
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(100),
+        original: z.unknown(),
+      })
+      .strict()
+      .parse(await c.req.json());
+    const id = c.req.param("id");
+    if (
+      store
+        .sessions()
+        .some((s) => s.options.worldbookId === id && busy.has(s.id))
+    )
+      return c.json({ error: "相关存档正在生成，请稍后修改" }, 409);
+    const updated = importBook(body.original);
+    store.updateAsset(id, "worldbooks", body.name, updated);
+    return c.json({ id, name: body.name, ...updated });
+  });
   app.get("/api/worlds/:id/export", (c) => {
     const w = store.worlds().find((w) => w.id === c.req.param("id"));
-    if (!w) return c.json({ error: "世界卡不存在" }, 404);
+    if (!w) return c.json({ error: "世界书不存在" }, 404);
     return c.json(w.original);
   });
   app.get("/api/cards", (c) => c.json(store.cards()));
@@ -140,7 +173,7 @@ export function createApp(
         throw new Error("绑定资源不存在");
     }
     if (!store.session(id).cardId && options.worldId === null)
-      throw new Error("纯世界存档必须保留世界卡");
+      throw new Error("纯世界存档必须保留世界书");
     store.setOptions(id, { ...store.options(id), ...options });
     return c.json(store.options(id));
   });
@@ -294,7 +327,7 @@ export function createApp(
     const item = store.cards().find((x) => x.id === cardId);
     const world = store.worlds().find((x) => x.id === worldId);
     if (cardId && !item) throw new Error("角色卡不存在");
-    if (worldId && !world) throw new Error("世界卡不存在");
+    if (worldId && !world) throw new Error("世界书不存在");
     const card = combinedCard(item?.card, world?.world);
     const opening = world?.world.data.first_mes || card.data.first_mes;
     const id = store.create(

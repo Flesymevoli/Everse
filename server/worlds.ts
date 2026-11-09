@@ -15,13 +15,22 @@ export const worldSchema = z
   })
   .passthrough();
 export type World = z.infer<typeof worldSchema>;
-export function importWorld(raw: unknown, name = "导入的世界") {
+export function importWorld(raw: unknown, name = "导入的世界书") {
   const isBook = typeof raw === "object" && raw !== null && "entries" in raw;
+  const meta = isBook
+    ? (raw as Record<string, unknown>)._yunotavern
+    : undefined;
+  const appMeta =
+    meta && typeof meta === "object" ? (meta as Record<string, unknown>) : {};
   const world = worldSchema.parse(
-    isBook ? { spec: "yuno_world_v1", data: { name, worldbook: raw } } : raw,
+    isBook
+      ? { spec: "yuno_world_v1", data: { name, ...appMeta, worldbook: raw } }
+      : raw,
   );
   const warnings = world.data.worldbook
-    ? importBook(world.data.worldbook).warnings
+    ? importBook(world.data.worldbook).warnings.filter(
+        (w) => w !== "未执行 book._yunotavern",
+      )
     : [];
   for (const k of Object.keys(world))
     if (!["spec", "data"].includes(k)) warnings.push("保留但未执行 world." + k);
@@ -34,7 +43,7 @@ export function combinedCard(
   card: Card | undefined,
   world: World | undefined,
 ): Card {
-  if (!card && !world) throw new Error("请选择世界卡或角色卡");
+  if (!card && !world) throw new Error("请选择世界书或角色卡");
   return (
     card ??
     cardSchema.parse({
