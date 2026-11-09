@@ -6,6 +6,7 @@ import {
 } from "./preparation.js";
 import { randomUUID } from "node:crypto";
 import { extractWord } from "./documents.js";
+import { sourceContext } from "./document-context.js";
 import {
   historyKey,
   parseStory,
@@ -100,12 +101,26 @@ export function createApp(
     const extracted = await extractWord(buffer, name);
     const documentId = randomUUID();
     store.db
-      .prepare("INSERT INTO source_documents VALUES (?,?,?)")
-      .run(documentId, name, buffer);
+      .prepare(
+        "INSERT INTO source_documents(id,name,body,extracted) VALUES (?,?,?,?)",
+      )
+      .run(documentId, name, buffer, extracted.text);
+    const reference = extracted.text.length > 100000;
     return c.json({
       name: name.slice(0, 100),
       format: "docx",
       ...extracted,
+      text: reference ? "" : extracted.text,
+      reference,
+      characters: extracted.text.length,
+      warnings: [
+        ...extracted.warnings,
+        ...(reference
+          ? [
+              "已完整保存长文。开局及续写只发送与当前情境相关的原文片段，不会整篇发送或自动付费摘要；可在设定框补充开局地点、人物或主题以帮助检索。",
+            ]
+          : []),
+      ],
       documentId,
     });
   });
@@ -120,6 +135,15 @@ export function createApp(
     );
     c.header("Content-Disposition", 'attachment; filename="original.docx"');
     return c.body(new Uint8Array(row.body as Uint8Array));
+  });
+  app.get("/api/documents/:id/text", (c) => {
+    const row = store.db
+      .prepare("SELECT extracted FROM source_documents WHERE id=?")
+      .get(c.req.param("id"));
+    if (!row || typeof row.extracted !== "string")
+      return c.json({ error: "提取文本不存在" }, 404);
+    c.header("Content-Disposition", 'attachment; filename="extracted.txt"');
+    return c.text(row.extracted);
   });
   app.post("/api/sessions/:id/preparation", async (c) => {
     const body = await c.req.json(),
@@ -329,6 +353,7 @@ export function createApp(
     if (
       !store.session(id).cardId &&
       !store.options(id).storySource?.text &&
+      !store.options(id).storySource?.reference &&
       options.worldId === null
     )
       throw new Error("纯世界存档必须保留世界书");
@@ -690,15 +715,18 @@ export function createApp(
         )
       : { text: "", selected: [], omitted: 0, bytes: 0 };
     const base = historyKey(session.messages);
+    const source = sourceContext(
+      store,
+      session.options.storySource,
+      [...history.slice(-2).map((m) => m.content), input].join("\n"),
+      Math.min(6000, Math.max(1600, Math.floor(budget / 2))),
+    );
     const prompt = buildContext(runtimeCard, history, input, budget, reserve, {
       player:
         session.options.player ??
         readPlayer(worldCard?.world.data) ??
         readPlayer(runtimeCard.data),
-      worldDescription: [
-        session.options.storySource?.text,
-        worldCard?.world.data.description,
-      ]
+      worldDescription: [source.text, worldCard?.world.data.description]
         .filter(Boolean)
         .join("\n\n"),
       cardWorldbook: worldCard?.world.data.worldbook,
@@ -742,6 +770,7 @@ export function createApp(
               outputSource: limits.outputSource,
               maxTokens: limits.maxTokens ?? null,
               memory: tracking ? memory : null,
+              document: source.document,
             },
           }) + "\n",
         );

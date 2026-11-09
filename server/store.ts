@@ -11,6 +11,13 @@ export class Store {
     this.db.exec(
       "CREATE TABLE IF NOT EXISTS source_documents(id TEXT PRIMARY KEY, name TEXT NOT NULL, body BLOB NOT NULL)",
     );
+    if (
+      !this.db
+        .prepare("PRAGMA table_info(source_documents)")
+        .all()
+        .some((row) => row.name === "extracted")
+    )
+      this.db.exec("ALTER TABLE source_documents ADD COLUMN extracted TEXT");
     this.db
       .exec(`CREATE TABLE IF NOT EXISTS story_corrections(id INTEGER PRIMARY KEY, sessionId TEXT NOT NULL, anchor TEXT NOT NULL, count INTEGER NOT NULL, key TEXT NOT NULL, value TEXT);
       CREATE TABLE IF NOT EXISTS turn_drafts(sessionId TEXT PRIMARY KEY, body TEXT NOT NULL);

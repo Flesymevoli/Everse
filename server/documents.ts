@@ -100,8 +100,6 @@ export async function extractWord(buffer: Buffer, name: string) {
   const text = result.value.trim();
   if (!text)
     throw new Error("Word 中没有可提取的正文文字；扫描件或纯图片文档暂不支持");
-  if (text.length > 100000)
-    throw new Error("提取文字超过10万字符，请拆分文档；没有截断或导入部分内容");
   const warnings = [notice];
   if (result.messages.length)
     warnings.push(

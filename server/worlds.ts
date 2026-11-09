@@ -47,9 +47,19 @@ export function importWorld(raw: unknown, name = "导入的世界书") {
 export function combinedCard(
   card: Card | undefined,
   world: World | undefined,
-  source?: { name: string; text: string },
+  source?: {
+    name: string;
+    text: string;
+    documentId?: string;
+    reference?: boolean;
+  },
 ): Card {
-  if (!card && !world && !source?.text.trim())
+  if (
+    !card &&
+    !world &&
+    !source?.text.trim() &&
+    !(source?.reference && source.documentId)
+  )
     throw new Error("请写下故事设定，或选择已有角色卡/世界书");
   return (
     card ??

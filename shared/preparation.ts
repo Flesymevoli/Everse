@@ -12,6 +12,8 @@ export const preparationSchema = z
         format: z.enum(["text", "txt", "md", "docx"]),
         text: z.string().max(100000),
         documentId: z.string().uuid().optional(),
+        reference: z.boolean().optional(),
+        characters: z.number().int().nonnegative().optional(),
         warnings: z.array(z.string().max(4000)).max(20).optional(),
       })
       .strict()

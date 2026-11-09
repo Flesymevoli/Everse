@@ -164,7 +164,9 @@ export function OpeningPreparation({
         <fieldset disabled={working}>
           <h3>1 · 故事与人物</h3>
           <label>
-            你想进入怎样的故事？（已有作品可留空）
+            {draft.source?.reference
+              ? "开局方向或补充要求（可选，不会修改长文原件）"
+              : "你想进入怎样的故事？（已有作品可留空）"}
             <textarea
               aria-label="故事设定"
               maxLength={100000}
@@ -215,7 +217,9 @@ export function OpeningPreparation({
                     const source = preparationSchema.shape.source.parse(result);
                     setDraft({ ...draft, source });
                     setNotice(
-                      "Word 文字已提取到设定框。请检查内容，保存准备后可继续；导入不会调用 AI。",
+                      source?.reference
+                        ? "长文已完整保存为故事资料。可补充想从哪位人物或哪个场景开始，再生成开场；不必拆分文档。"
+                        : "Word 文字已提取到设定框。请检查内容，保存准备后可继续；导入不会调用 AI。",
                     );
                     return;
                   }
@@ -248,9 +252,27 @@ export function OpeningPreparation({
             </p>
           ))}
           {draft.source?.documentId && (
-            <a href={`/api/documents/${draft.source.documentId}/original`}>
-              下载原始 Word 文档
-            </a>
+            <div>
+              {draft.source.reference && (
+                <p role="status">
+                  长文资料：{draft.source.characters?.toLocaleString()}{" "}
+                  字符已保留。每轮只引用部分相关片段；实际片段可在 Prompt
+                  Inspector 查看。系统不保证找到所有相关设定。
+                </p>
+              )}
+              <a href={`/api/documents/${draft.source.documentId}/original`}>
+                下载原始 Word 文档
+              </a>
+              {draft.source.reference && (
+                <>
+                  {" "}
+                  ·{" "}
+                  <a href={`/api/documents/${draft.source.documentId}/text`}>
+                    下载完整提取文本
+                  </a>
+                </>
+              )}
+            </div>
           )}
           <details
             open={

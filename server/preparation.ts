@@ -6,6 +6,7 @@ import { buildContext } from "./context.js";
 import { presetSchema, importPreset, parametersSchema } from "./preset.js";
 import type { Config } from "./provider.js";
 import { resolveBudget } from "./budget.js";
+import { sourceContext } from "./document-context.js";
 import { parseStory, storyInstruction } from "./story.js";
 export function ensurePreparation(store: Store, id: string) {
   const s = store.session(id);
@@ -81,6 +82,7 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
   if (!d.opening.trim())
     throw new Error("请先选择、编写或生成开场剧情，再确认开始");
   const r = preparationResources(store, d);
+  sourceContext(store, d.source, d.opening); // Reject missing references before committing a new game.
   const generated = store.draft(id);
   let openingStory;
   if (generated?.raw) {
@@ -157,6 +159,12 @@ export function openingRequest(
   });
   if (parameters.seed === -1) delete parameters.seed;
   const limits = resolveBudget(budget, reserve, preset);
+  const source = sourceContext(
+    store,
+    d.source,
+    `${d.player.description}\n${d.opening}`,
+    Math.min(6000, Math.max(1600, Math.floor(limits.budget / 2))),
+  );
   const prompt = buildContext(
     r.card,
     [],
@@ -167,7 +175,7 @@ export function openingRequest(
       ...s.options,
       automaticBudget: limits.automaticBudget,
       player: d.player,
-      worldDescription: [d.source?.text, r.world?.data.description]
+      worldDescription: [source.text, r.world?.data.description]
         .filter(Boolean)
         .join("\n\n"),
       cardWorldbook: r.world?.data.worldbook,
@@ -183,6 +191,7 @@ export function openingRequest(
   return {
     prompt: {
       ...prompt,
+      document: source.document,
       budgetSource: limits.budgetSource,
       outputSource: limits.outputSource,
       maxTokens: limits.maxTokens ?? null,
