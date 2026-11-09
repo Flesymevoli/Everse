@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Card } from "../server/cards";
+import { greetings } from "../shared/character-text";
 import type { Message } from "../server/context";
 import "./style.css";
+import { ModelPicker } from "./ModelPicker";
 import { ReadingView } from "./ReadingView";
+import { StoryPanel } from "./StoryPanel";
+import { Management } from "./Management";
 type Work = { id: string; card: Card; warnings: string[] };
-type Save = { id: string; cardId: string };
+type Save = {
+  id: string;
+  cardId: string;
+  options?: { name?: string; archived?: boolean };
+};
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const r = await fetch(
     "/api/" + path,
@@ -22,6 +30,9 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 function App() {
+  const [storyPanel, setStoryPanel] = useState(
+    () => window.matchMedia("(min-width: 1120px)").matches,
+  );
   const [sidebar, setSidebar] = useState(false),
     [settings, setSettings] = useState(false),
     [suggestions, setSuggestions] = useState(false),
@@ -80,14 +91,14 @@ function App() {
       setGenerating(false);
     }
   }
-  async function send() {
+  async function send(mode: "send" | "regenerate" = "send") {
     await action(async () => {
       setDraft("");
       setGenerating(true);
       const r = await fetch("/api/sessions/" + session + "/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, config, budget, reserve }),
+        body: JSON.stringify({ input, config, budget, reserve, mode }),
       });
       if (!r.ok) {
         const e = await r.json();
@@ -117,11 +128,13 @@ function App() {
       const updated = await api<{ messages: Message[] }>("sessions/" + session);
       setMessages(updated.messages);
       setDraft("");
-      setInput("");
+      if (mode === "send") setInput("");
     });
   }
   return (
-    <div className={sidebar ? "app sidebar-open" : "app"}>
+    <div
+      className={`app${sidebar ? " sidebar-open" : ""}${storyPanel ? " story-panel-open" : ""}`}
+    >
       <header className="topbar">
         <button
           aria-label="切换作品侧栏"
@@ -134,6 +147,13 @@ function App() {
           Narrative <em>Slice</em>
         </span>
         <span className="mode">{config.mock ? "模拟模式" : "自有 API"}</span>
+        <button
+          aria-expanded={storyPanel}
+          aria-controls="story-panel"
+          onClick={() => setStoryPanel(!storyPanel)}
+        >
+          角色
+        </button>
         <button onClick={() => setSettings(true)}>设置</button>
       </header>
       {sidebar && (
@@ -151,16 +171,28 @@ function App() {
           <input
             disabled={busy}
             type="file"
-            accept=".json,application/json"
+            accept=".json,.png,application/json,image/png"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file)
                 void action(async () => {
                   if (file.size > 2000000) throw new Error("文件上限 2 MB");
-                  const result = await api<Work>(
-                    "cards",
-                    JSON.parse(await file.text()),
-                  );
+                  let result: Work;
+                  if (file.name.toLowerCase().endsWith(".png")) {
+                    const response = await fetch("/api/cards", {
+                      method: "POST",
+                      headers: { "Content-Type": "image/png" },
+                      body: file,
+                    });
+                    const data = await response.json();
+                    if (!response.ok)
+                      throw new Error(data.error ?? "PNG 导入失败");
+                    result = data as Work;
+                  } else
+                    result = await api<Work>(
+                      "cards",
+                      JSON.parse(await file.text()),
+                    );
                   await refresh();
                   setSelected(result.id);
                   setSession("");
@@ -173,40 +205,54 @@ function App() {
           />
         </label>
         {works.map((w) => (
-          <button
-            key={w.id}
-            className="shelf-item"
-            disabled={busy}
-            aria-pressed={selected === w.id}
-            onClick={() => {
-              setSelected(w.id);
-              setSession("");
-              setMessages([]);
-              setDraft("");
-              setPrompt(null);
-              setSidebar(false);
-            }}
-          >
-            {w.card.data.name}
-          </button>
+          <details className="work-group" key={w.id}>
+            <summary>
+              {w.card.data.name}
+              <span className="save-count">
+                {saves.filter((save) => save.cardId === w.id).length}
+              </span>
+            </summary>
+            <div className="work-saves">
+              {saves.map(
+                (save, i) =>
+                  save.cardId === w.id && (
+                    <button
+                      className="shelf-item"
+                      key={save.id}
+                      disabled={busy}
+                      aria-pressed={session === save.id}
+                      onClick={() => void action(() => load(save.id))}
+                    >
+                      {save.options?.name ??
+                        "存档 " + String(i + 1).padStart(2, "0")}
+                      {save.options?.archived ? " · 已归档" : ""}
+                    </button>
+                  ),
+              )}
+              {!saves.some((save) => save.cardId === w.id) && (
+                <p className="muted">还没有存档，开始第一段故事吧。</p>
+              )}
+              <button
+                className="text-button"
+                disabled={busy}
+                onClick={() =>
+                  void action(async () => {
+                    const save = await api<{ id: string }>("sessions", {
+                      cardId: w.id,
+                    });
+                    await refresh();
+                    await load(save.id);
+                  })
+                }
+              >
+                ＋ 新建存档
+              </button>
+            </div>
+          </details>
         ))}
         {!works.length && (
           <p className="muted">导入一张 JSON 角色卡，让故事从这里开始。</p>
         )}
-        <h2 className="saves-title">继续阅读</h2>
-        {saves.map((save, i) => (
-          <button
-            className="shelf-item"
-            key={save.id}
-            disabled={busy}
-            aria-pressed={session === save.id}
-            onClick={() => void action(() => load(save.id))}
-          >
-            {works.find((w) => w.id === save.cardId)?.card.data.name ?? "作品"}
-            <small>存档 {String(i + 1).padStart(2, "0")}</small>
-          </button>
-        ))}
-        {!saves.length && <p className="muted">每一段故事，都会留在本机。</p>}
         <div className="sidebar-footer">
           <button onClick={() => setSettings(true)}>偏好与模型设置</button>
           <p>Spend tokens on storytelling.</p>
@@ -236,6 +282,41 @@ function App() {
               另起一段故事 ↗
             </button>
           )}
+          {work &&
+            session &&
+            !busy &&
+            messages.length <= 1 &&
+            !messages.some((message) => message.role !== "assistant") &&
+            greetings(work.card).length > 1 && (
+              <label className="greeting-choice">
+                开场白
+                <select
+                  aria-label="选择开场白"
+                  value={Math.max(
+                    0,
+                    greetings(work.card).indexOf(messages[0]?.content ?? ""),
+                  )}
+                  onChange={(event) => {
+                    const index = Number(event.target.value);
+                    void action(async () => {
+                      const updated = await api<{ messages: Message[] }>(
+                        "sessions/" + session + "/greeting",
+                        { index },
+                      );
+                      setMessages(updated.messages);
+                      setPrompt(null);
+                    });
+                  }}
+                >
+                  {greetings(work.card).map((text, index) => (
+                    <option key={index} value={index}>
+                      {index === 0 ? "默认开场" : `备选 ${index}`} ·{" "}
+                      {text.slice(0, 45) || "空开场"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
         </div>
         {error && (
           <p role="alert" className="error">
@@ -243,6 +324,17 @@ function App() {
           </p>
         )}
         <ReadingView
+          busy={busy}
+          onRegenerate={() => void send("regenerate")}
+          onSwipe={(messageIndex, index) =>
+            void action(async () => {
+              const updated = await api<{ messages: Message[] }>(
+                "sessions/" + session + "/swipe",
+                { messageIndex, index },
+              );
+              setMessages(updated.messages);
+            })
+          }
           messages={messages}
           draft={draft}
           generating={generating}
@@ -268,6 +360,33 @@ function App() {
           </div>
         )}
         <div className="composer-wrap">
+          <div className="composer-preferences">
+            <button
+              type="button"
+              className="suggestion-toggle"
+              role="switch"
+              aria-checked={suggestions && !!session}
+              aria-label="生成行动建议"
+              disabled={busy || !session}
+              title={
+                session
+                  ? "按当前存档保存；建议只提供灵感，可自由输入"
+                  : "进入存档后可开启"
+              }
+              onClick={() =>
+                void action(async () => {
+                  const enabled = !suggestions;
+                  await api("sessions/" + session + "/preferences", {
+                    suggestions: enabled,
+                  });
+                  setSuggestions(enabled);
+                })
+              }
+            >
+              <span className="toggle-dot" aria-hidden="true" />
+              行动建议 <span>{suggestions && session ? "开" : "关"}</span>
+            </button>
+          </div>
           <form
             className="composer"
             onSubmit={(e) => {
@@ -297,25 +416,48 @@ function App() {
                     ? "自动保存 · 自由输入"
                     : "本地优先 · 由你掌握"}
               </span>
-              {generating ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void api("sessions/" + session + "/stop", {}).catch(() =>
-                      setError("停止请求失败，请稍后重试"),
-                    )
-                  }
-                >
-                  停止生成
-                </button>
-              ) : (
-                <button
-                  className="primary"
-                  disabled={busy || !session || !input.trim()}
-                >
-                  继续故事 ↑
-                </button>
-              )}
+              <div className="composer-actions">
+                <ModelPicker
+                  model={config.model}
+                  mock={config.mock}
+                  disabled={busy}
+                  onSelect={(mock) => setConfig({ ...config, mock })}
+                  onSettings={() => setSettings(true)}
+                />
+                {generating ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void api("sessions/" + session + "/stop", {}).catch(() =>
+                        setError("停止请求失败，请稍后重试"),
+                      )
+                    }
+                  >
+                    停止生成
+                  </button>
+                ) : (
+                  <button
+                    className="primary send-button"
+                    aria-label="继续故事"
+                    title="继续故事"
+                    disabled={busy || !session || !input.trim()}
+                  >
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 19V5m-6 6 6-6 6 6" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
           </form>
           <p className="composer-hint">
@@ -323,6 +465,16 @@ function App() {
           </p>
         </div>
       </main>
+      {storyPanel && (
+        <>
+          <button
+            className="story-panel-scrim"
+            aria-label="关闭角色信息"
+            onClick={() => setStoryPanel(false)}
+          />
+          <StoryPanel card={work?.card} onClose={() => setStoryPanel(false)} />
+        </>
+      )}
       {settings && (
         <div className="settings-backdrop" onClick={() => setSettings(false)}>
           <section
@@ -336,7 +488,7 @@ function App() {
               if (e.key === "Tab") {
                 const controls = Array.from(
                   e.currentTarget.querySelectorAll<HTMLElement>(
-                    "button:not(:disabled), input:not(:disabled), summary, textarea:not(:disabled)",
+                    "button:not(:disabled), input:not(:disabled), summary, textarea:not(:disabled), select:not(:disabled), a[href]",
                   ),
                 );
                 const first = controls[0],
@@ -363,30 +515,6 @@ function App() {
               </button>
             </div>
             <fieldset disabled={busy}>
-              <h3>游戏偏好</h3>
-              <label className="toggle-row">
-                <span>
-                  生成行动建议
-                  <small>提供灵感，始终允许自由输入。按当前存档保存。</small>
-                </span>
-                <input
-                  disabled={!session}
-                  type="checkbox"
-                  checked={suggestions && !!session}
-                  onChange={(e) => {
-                    const enabled = e.target.checked;
-                    void action(async () => {
-                      await api("sessions/" + session + "/preferences", {
-                        suggestions: enabled,
-                      });
-                      setSuggestions(enabled);
-                    });
-                  }}
-                />
-              </label>
-              {!session && (
-                <p className="muted">进入一个存档后可设置行动建议。</p>
-              )}
               <h3>API 与模型</h3>
               <label className="toggle-row">
                 使用免费模拟回复
@@ -440,10 +568,51 @@ function App() {
                 </label>
               </div>
             </fieldset>
+            <details>
+              <summary>管理世界书、预设与聊天</summary>
+              <Management
+                key={session}
+                session={session}
+                cardId={selected}
+                messages={messages}
+                disabled={busy}
+                onUpdate={async (id) => {
+                  await refresh();
+                  await load(id);
+                }}
+              />
+            </details>
             {work && (
               <details>
                 <summary>作品设定与兼容性</summary>
+                <a href={`/api/cards/${work.id}/export`}>导出角色卡 JSON</a>
+                <p className="muted">
+                  新导入作品导出原始 JSON
+                  对象；旧作品导出已有存储字段，无法恢复导入时未保存的原文件格式。
+                </p>
                 <p>{work.card.data.description || "极简设定"}</p>
+                {work.card.data.scenario && (
+                  <p>初始场景：{work.card.data.scenario}</p>
+                )}
+                <details>
+                  <summary>
+                    世界书（{work.card.data.character_book?.entries.length ?? 0}
+                    ）
+                  </summary>
+                  {work.card.data.character_book?.entries.map((entry, i) => (
+                    <div className="world-entry" key={i}>
+                      <h3>{entry.keys.join(" · ") || `条目 ${i + 1}`}</h3>
+                      <small>
+                        {!entry.enabled
+                          ? "已停用"
+                          : entry.constant
+                            ? "常驻上下文"
+                            : "关键词触发"}
+                      </small>
+                      <p>{entry.content}</p>
+                    </div>
+                  ))}
+                </details>
                 <p>
                   角色卡和世界书编辑器尚待实现，可修改原 JSON 后导入为新作品。
                 </p>

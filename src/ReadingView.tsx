@@ -1,7 +1,11 @@
+import { variantsOf, activeVariant } from "../shared/swipes";
 import type { Message } from "../server/context";
 import { readingDraft } from "../server/suggestions";
 
 interface Props {
+  busy: boolean;
+  onRegenerate: () => void;
+  onSwipe: (messageIndex: number, index: number) => void;
   messages: Message[];
   draft: string;
   generating: boolean;
@@ -10,6 +14,9 @@ interface Props {
   onCopy: (text: string) => void;
 }
 export function ReadingView({
+  busy,
+  onRegenerate,
+  onSwipe,
   messages,
   draft,
   generating,
@@ -48,6 +55,42 @@ export function ReadingView({
             >
               复制
             </button>
+            {message.role === "assistant" && (
+              <div className="variant-actions">
+                {variantsOf(message).length > 1 && (
+                  <>
+                    <button
+                      disabled={busy || activeVariant(message) === 0}
+                      aria-label="上一个候选"
+                      onClick={() => onSwipe(index, activeVariant(message) - 1)}
+                    >
+                      ‹
+                    </button>
+                    <small>
+                      {activeVariant(message) + 1} /{" "}
+                      {variantsOf(message).length}
+                    </small>
+                    <button
+                      disabled={
+                        busy ||
+                        activeVariant(message) ===
+                          variantsOf(message).length - 1
+                      }
+                      aria-label="下一个候选"
+                      onClick={() => onSwipe(index, activeVariant(message) + 1)}
+                    >
+                      ›
+                    </button>
+                  </>
+                )}
+                {index === messages.length - 1 &&
+                  messages[index - 1]?.role === "user" && (
+                    <button disabled={busy} onClick={onRegenerate}>
+                      重新生成
+                    </button>
+                  )}
+              </div>
+            )}
           </article>
         ))}
         {visibleDraft && (
