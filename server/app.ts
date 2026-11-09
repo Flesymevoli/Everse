@@ -21,6 +21,7 @@ import { sectionKind } from "../shared/document-plan.js";
 import {
   historyKey,
   parseStory,
+  parseNarrative,
   readStory,
   storyContext,
   storyInstruction,
@@ -74,6 +75,7 @@ const turn = z.object({
 export function createApp(
   store: Store,
   protector: SecretProtector = windowsProtector,
+  webPort = 5173,
 ) {
   const vault = new ConnectionVault(store, protector);
   const app = new Hono();
@@ -96,7 +98,9 @@ export function createApp(
     const origin = c.req.header("origin");
     if (
       origin &&
-      !["http://127.0.0.1:5173", "http://localhost:5173"].includes(origin)
+      ![`http://127.0.0.1:${webPort}`, `http://localhost:${webPort}`].includes(
+        origin,
+      )
     )
       return c.json({ error: "来源不允许" }, 403);
     await next();
@@ -106,6 +110,9 @@ export function createApp(
       { error: e instanceof z.ZodError ? validationMessage(e) : e.message },
       400,
     ),
+  );
+  app.get("/api/health", (c) =>
+    c.json({ application: "Everse", status: "ok" }),
   );
   app.post("/api/documents/word", async (c) => {
     const name = z.string().min(1).max(200).parse(c.req.query("name"));
@@ -324,7 +331,7 @@ export function createApp(
       }
       controller.signal.throwIfAborted();
       if (!opening.trim()) throw new Error("空开场");
-      const parsed = parseStory(opening, []);
+      const parsed = parseNarrative(opening, []);
       store.saveDraft(id, {
         raw: opening,
         input: "",
@@ -334,7 +341,14 @@ export function createApp(
       const openingText = parseSuggestions(parsed.text).text;
       savePreparation(store, id, { ...body.draft, opening: openingText });
       status = "completed";
-      return c.json({ opening: openingText, prompt: request.prompt });
+      return c.json({
+        opening: openingText,
+        prompt: request.prompt,
+        warning:
+          [request.prompt.guideWarning, parsed.warning]
+            .filter(Boolean)
+            .join("\n") || undefined,
+      });
     } catch (error) {
       store.saveDraft(id, {
         raw: opening,
@@ -896,6 +910,9 @@ export function createApp(
             : suggestionInstruction
           : "",
         tracking ? memory.text + "\n" + storyInstruction : "",
+        tracking && history.some((message) => message.warning)
+          ? "部分历史回合的辅助状态未更新；与状态冲突时，以较新的正文和玩家明确修订为准，不凭空补全缺失记录。"
+          : "",
         directorInstruction(session.options.director),
       ]
         .filter(Boolean)
@@ -954,8 +971,11 @@ export function createApp(
         if (!reply.trim()) throw new Error("模型返回空回复");
         controller.signal.throwIfAborted();
         const narrative = tracking
-          ? parseStory(reply, [...history, { role: "user", content: input }])
-          : { text: reply, story: undefined };
+          ? parseNarrative(reply, [
+              ...history,
+              { role: "user", content: input },
+            ])
+          : { text: reply, story: undefined, warning: undefined };
         const parsed = session.suggestions
           ? parseSuggestions(narrative.text)
           : { text: narrative.text, suggestions: [] };
@@ -965,6 +985,7 @@ export function createApp(
           suggestions: parsed.suggestions,
           raw: reply,
           story: narrative.story,
+          warning: narrative.warning,
         };
         store.commitTurn(
           id,

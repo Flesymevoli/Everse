@@ -2,8 +2,10 @@ import { expand as expandText, type Card } from "./cards.js";
 import { evaluateBook } from "./worldbook.js";
 import { presetSchema } from "./preset.js";
 export interface Message {
+  warning?: string;
   story?: import("../shared/story.js").StoryPatch;
   variants?: {
+    warning?: string;
     story?: import("../shared/story.js").StoryPatch;
     content: string;
     raw?: string;

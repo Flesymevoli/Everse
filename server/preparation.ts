@@ -7,7 +7,7 @@ import { presetSchema, importPreset, parametersSchema } from "./preset.js";
 import type { Config } from "./provider.js";
 import { resolveBudget } from "./budget.js";
 import { sourceContext } from "./document-context.js";
-import { parseStory, storyInstruction } from "./story.js";
+import { parseStory, parseNarrative, storyInstruction } from "./story.js";
 import { visibleStory } from "../shared/story.js";
 import { createHash } from "node:crypto";
 import { parseSuggestions, suggestionInstruction } from "./suggestions.js";
@@ -53,9 +53,8 @@ export function guideSource(store: Store, d: Preparation) {
 }
 function validateGuide(store: Store, d: Preparation) {
   if (d.guide && guideSource(store, d).hash !== d.guide.sourceHash)
-    throw new Error(
-      "作品设定或资料分类已改变，请重新读取开局引导，或移除旧引导后继续",
-    );
+    return "作品设定已改变，旧开局问答未采用；本次使用当前设定继续。需要时可重新读取引导。";
+  return undefined;
 }
 export function recoverOpening(store: Store, id: string) {
   const session = ensurePreparation(store, id);
@@ -150,19 +149,23 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
   if (!d.opening.trim())
     throw new Error("请先选择、编写或生成开场剧情，再确认开始");
   const r = preparationResources(store, d);
-  validateGuide(store, d);
+  const guideWarning = validateGuide(store, d);
   sourceContext(store, d.source, d.opening); // Reject missing references before committing a new game.
   const generated = store.draft(id);
   let openingChoices = parseSuggestions(d.opening);
   let openingStory;
+  let openingWarning: string | undefined = guideWarning;
   if (generated?.raw) {
     try {
-      const parsed = parseStory(generated.raw, []);
+      const parsed = parseNarrative(generated.raw, []);
       if (
         parseSuggestions(parsed.text).text === openingChoices.text &&
         expand(d.opening, r.card.data.name, d.player.name) === d.opening
       ) {
         openingStory = parsed.story;
+        openingWarning =
+          [guideWarning, parsed.warning].filter(Boolean).join("\n") ||
+          undefined;
         openingChoices = parseSuggestions(parsed.text);
       }
     } catch {
@@ -190,6 +193,7 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
           suggestions: openingChoices.suggestions,
           raw: d.opening,
           story: openingStory,
+          warning: openingWarning,
         },
       ]),
       id,
@@ -204,7 +208,7 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       worldbookId: d.worldbookId,
       storySource: d.source,
       storyTracking: true,
-      openingGuide: d.guide,
+      openingGuide: guideWarning ? undefined : d.guide,
       name: d.name?.trim() || s.options.name || d.source?.name,
     });
     store.db.prepare("DELETE FROM turn_drafts WHERE sessionId=?").run(id);
@@ -237,7 +241,7 @@ export function openingRequest(
   });
   if (parameters.seed === -1) delete parameters.seed;
   const limits = resolveBudget(budget, reserve, preset);
-  validateGuide(store, d);
+  const guideWarning = validateGuide(store, d);
   const source = sourceContext(
     store,
     d.source,
@@ -258,7 +262,7 @@ export function openingRequest(
       worldDescription: [
         source.text,
         r.world?.data.description,
-        guideAnswers(d.guide),
+        guideWarning ? "" : guideAnswers(d.guide),
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -283,6 +287,8 @@ export function openingRequest(
   return {
     prompt: {
       ...prompt,
+      warnings: [...prompt.warnings, ...(guideWarning ? [guideWarning] : [])],
+      guideWarning,
       document: source.document,
       budgetSource: limits.budgetSource,
       outputSource: limits.outputSource,

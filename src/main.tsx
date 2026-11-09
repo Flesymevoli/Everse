@@ -48,6 +48,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
 }
 function App() {
   const [saveSettings, setSaveSettings] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
   const [storyPanel, setStoryPanel] = useState(
     () => window.matchMedia("(min-width: 1120px)").matches,
   );
@@ -229,7 +230,7 @@ function App() {
           ☰
         </button>
         <span className="brand">
-          Yuno<em>Tavern</em>
+          Ever<em>se</em>
         </span>
         <span className="mode">
           {connections.selectedId === null ? "模拟模式" : "自有 API"}
@@ -306,6 +307,14 @@ function App() {
               node.scrollHeight - node.clientHeight - node.scrollTop < 80;
           }}
         >
+          {notice && (
+            <p role="status" className="muted">
+              {notice}
+              <button aria-label="关闭提示" onClick={() => setNotice("")}>
+                ×
+              </button>
+            </p>
+          )}
           <div className="book-heading">
             <p className="eyebrow">一部由你参与的小说</p>
             <h1>
@@ -441,19 +450,20 @@ function App() {
               }
               onGenerate={async (draft) => {
                 const config = resolveConnection(connections);
-                const result = await api<{ opening: string; prompt: unknown }>(
-                  "sessions/" + session + "/opening",
-                  {
-                    draft,
-                    config,
-                    ...(!automaticBudget ? { budget, reserve } : {}),
-                    connectionId: connections.profiles.find(
-                      (p) => p.id === connections.selectedId,
-                    )?.saved
-                      ? connections.selectedId
-                      : undefined,
-                  },
-                ).catch(async (error) => {
+                const result = await api<{
+                  opening: string;
+                  prompt: unknown;
+                  warning?: string;
+                }>("sessions/" + session + "/opening", {
+                  draft,
+                  config,
+                  ...(!automaticBudget ? { budget, reserve } : {}),
+                  connectionId: connections.profiles.find(
+                    (p) => p.id === connections.selectedId,
+                  )?.saved
+                    ? connections.selectedId
+                    : undefined,
+                }).catch(async (error) => {
                   const latest = await api<PreparingSession>(
                     "sessions/" + session,
                   ).catch(() => null);
@@ -532,6 +542,34 @@ function App() {
               >
                 <span className="toggle-dot" aria-hidden="true" />
                 行动建议 <span>{suggestions && session ? "开" : "关"}</span>
+              </button>
+              <button
+                type="button"
+                className="remember-setting"
+                disabled={busy || !session || !input.trim()}
+                title="将输入原文追加到本存档世界观，从下一轮持续使用；不调用模型，也不发送行动"
+                onClick={() =>
+                  void action(async () => {
+                    const previous = loadedSession?.options.director;
+                    await api(`sessions/${session}/director`, {
+                      revision: loadedSession?.options.directorRevision ?? 0,
+                      director: {
+                        characters: previous?.characters ?? "",
+                        playerState: previous?.playerState ?? "",
+                        direction: previous?.direction ?? "",
+                        world: [previous?.world, input.trim()]
+                          .filter(Boolean)
+                          .join("\n\n"),
+                      },
+                    });
+                    await load(session);
+                    setNotice(
+                      "已将输入原文保存为本存档世界设定；可在右侧故事引导中修改或删除。没有发送行动或调用模型。",
+                    );
+                  })
+                }
+              >
+                记为世界设定
               </button>
             </div>
             <form

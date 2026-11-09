@@ -10,6 +10,7 @@ function transform(value: string, decrypt: boolean): Promise<string> {
       new Error("当前仅支持 Windows 用户加密保存；没有明文回退"),
     );
   const operation = decrypt ? "Unprotect" : "Protect";
+  // Legacy entropy is deliberately stable across the Everse rename, so existing keys decrypt.
   const script = `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; $b=[Convert]::FromBase64String([Console]::In.ReadToEnd()); $e=[Text.Encoding]::UTF8.GetBytes('YunoTavern.connections.v1'); $r=[Security.Cryptography.ProtectedData]::${operation}($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Out.Write([Convert]::ToBase64String($r))`;
   return new Promise((resolve, reject) => {
     const child = execFile(

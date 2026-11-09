@@ -85,7 +85,12 @@ test("作品引导：实际本地模型请求、依据校验、缓存、保存�
       ...prepared,
       source: { ...draft.source!, text: "设定已经改变" },
     };
-    assert.equal((await post(app, path + "/start", changed)).status, 400);
+    const stale = await post(app, path + "/opening", {
+      draft: changed,
+      config,
+    });
+    assert.equal(stale.status, 200);
+    assert.match((await stale.json()).warning, /旧开局问答未采用/);
     const opening = await post(app, path + "/opening", {
       draft: prepared,
       config,

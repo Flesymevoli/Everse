@@ -42,6 +42,11 @@ export function ReadingView({
             key={index}
             className={message.role === "user" ? "action-record" : "passage"}
           >
+            {message.warning && (
+              <p className="narrative-warning" role="status">
+                {message.warning}
+              </p>
+            )}
             {message.role === "user" ? (
               <p>
                 <span aria-hidden="true">↳ </span>

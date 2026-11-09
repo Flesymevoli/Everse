@@ -1152,3 +1152,6 @@ pre {
 .save-settings { width: min(660px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); margin: auto; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); }
 .save-settings::backdrop { background: #30291f55; }
 .save-settings .panel-heading { position: sticky; top: -22px; background: var(--paper); z-index: 1; }
+.composer-preferences { gap: 8px; flex-wrap: wrap; }
+.remember-setting { font-size: 12px; color: var(--muted); }
+.prose .narrative-warning { font: 12px/1.7 "Segoe UI", "Microsoft YaHei", sans-serif; color: var(--muted); padding: 8px 0; }

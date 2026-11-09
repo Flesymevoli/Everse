@@ -11,6 +11,7 @@ export function variantsOf(message: Message): NonNullable<Message["variants"]> {
   return [
     {
       content: message.content,
+      warning: message.warning,
       story: message.story,
       raw: message.raw,
       suggestions: message.suggestions,
@@ -34,6 +35,7 @@ export function selectVariant(message: Message, index: number): Message {
   return {
     ...message,
     content: choice.content,
+    warning: choice.warning,
     story: choice.story,
     raw: choice.raw,
     suggestions: choice.suggestions ?? [],
@@ -52,6 +54,7 @@ export function appendVariant(message: Message, choice: Message): Message {
     ...variantsOf(message),
     {
       content: choice.content,
+      warning: choice.warning,
       story: choice.story,
       raw: choice.raw,
       suggestions: choice.suggestions,

@@ -5,6 +5,7 @@ import {
   storyPatchSchema,
   storyMarker,
   storyEnd,
+  visibleStory,
   type Correction,
   type StoryView,
   type SourcedFact,
@@ -144,6 +145,27 @@ export function originalEvidence(text: string, quote: string): string | null {
   );
 }
 export class StoryFormatError extends Error {}
+// A completed narrative does not depend on auxiliary state being well formed.
+// Transport failures still propagate before this function is called.
+export function parseNarrative(raw: string, history: Message[]) {
+  try {
+    return {
+      ...parseStory(raw, history),
+      warning: undefined as string | undefined,
+    };
+  } catch (error) {
+    if (!(error instanceof StoryFormatError)) throw error;
+    const text = visibleStory(raw).trim();
+    if (!text)
+      throw new StoryFormatError("模型没有返回可用正文；请调整请求后重试。");
+    return {
+      text,
+      story: undefined,
+      warning:
+        "正文已保留，本轮故事状态未更新：辅助数据缺失或校验未通过。可继续游玩或手动修正状态，未自动重试。",
+    };
+  }
+}
 export const storyInstruction = `在正文（及可选行动建议）之后，以 <story_update>{"changes":[{"key":"稳定的实体/属性键","kind":"scene|person|goal|fact|event","value":"简短事实或目标","evidence":"从本轮正文逐字引用的依据"}]}</story_update> 结束。只输出本轮新增或改变的记录，最多16条，没有变化可用空数组。复用已有键，避免同义重复；人物意图记为goal，不当成已发生事实；不从偏好或猜测推出事实。不虚构引用，不覆盖玩家修正。此协议只组织输出，不规定文学风格，不替代作者指令。`;
 
 export function storyContext(

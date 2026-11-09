@@ -48,7 +48,9 @@ export function OpeningPreparation({
   worlds: WorldItem[];
   modelControl: ReactNode;
   mock: boolean;
-  onGenerate: (draft: Preparation) => Promise<{ opening: string }>;
+  onGenerate: (
+    draft: Preparation,
+  ) => Promise<{ opening: string; warning?: string }>;
   onStarted: () => Promise<void>;
   onBusy: (value: boolean) => void;
   onClassify: (documentId: string, revision: number) => Promise<unknown>;
@@ -162,7 +164,7 @@ export function OpeningPreparation({
       setGenerating(true);
       const result = await onGenerate(draft);
       setDraft({ ...draft, opening: result.opening });
-      setNotice("开场已生成，请预览或编辑后确认开始。");
+      setNotice(result.warning ?? "开场已生成，请预览或编辑后确认开始。");
     });
   }
   return (

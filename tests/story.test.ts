@@ -314,16 +314,21 @@ test("一次开场加十轮：文本设定、真实回环 SSE、修正、重开�
     broken = true;
     assert.match(
       await (await post(path + "/turn", { config, input: "坏协议" })).text(),
-      /"type":"error"/,
+      /"type":"done"/,
     );
-    assert.equal(JSON.stringify(store.session(id).messages), before);
+    assert.equal(
+      JSON.stringify(store.session(id).messages.slice(0, -2)),
+      before,
+    );
     assert.equal(requests.length, 12);
-    assert.match(store.draft(id)!.raw, /未提交的正文/);
+    assert.match(store.session(id).messages.at(-1)!.warning!, /状态未更新/);
+    assert.match(store.session(id).messages.at(-1)!.raw!, /未提交的正文/);
+    const completed = JSON.stringify(store.session(id).messages);
     store.close();
     store = new Store(dbPath);
     app = createApp(store);
-    assert.equal(JSON.stringify(store.session(id).messages), before);
-    assert.match(store.draft(id)!.raw, /未提交的正文/);
+    assert.equal(JSON.stringify(store.session(id).messages), completed);
+    assert.equal(store.draft(id), null);
     assert.equal(
       store.story(id).facts.find((f) => f.key === "地点")?.value,
       "雨城旧城区",
@@ -333,7 +338,7 @@ test("一次开场加十轮：文本设定、真实回环 SSE、修正、重开�
       status: string;
     }[];
     assert.equal(usage.length, 12);
-    assert.equal(usage.at(-1)!.status, "failed");
+    assert.equal(usage.at(-1)!.status, "completed");
     assert.deepEqual(usage[0].usage, { input: 120, output: 80, cached: 20 });
     assert.equal(
       (await post(path + "/edit", { index: 2, content: "改写为离开雨城" }))
@@ -344,7 +349,7 @@ test("一次开场加十轮：文本设定、真实回环 SSE、修正、重开�
     assert.ok(!store.story(id).facts.some((f) => f.key === "线索11"));
     assert.ok(store.story(branch.id).facts.some((f) => f.key === "线索2"));
     assert.equal((await post(path + "/undo", {})).status, 200);
-    assert.equal(JSON.stringify(store.session(id).messages), before);
+    assert.equal(JSON.stringify(store.session(id).messages), completed);
   } finally {
     store.close();
     await new Promise<void>((r) => server.close(() => r()));
