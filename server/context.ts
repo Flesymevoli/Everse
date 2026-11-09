@@ -1,4 +1,4 @@
-import { expand, type Card } from "./cards.js";
+import { expand as expandText, type Card } from "./cards.js";
 import { evaluateBook } from "./worldbook.js";
 import { presetSchema } from "./preset.js";
 export interface Message {
@@ -22,6 +22,7 @@ export function buildContext(
   budget = 8192,
   reserve = 1024,
   options: {
+    player?: import("../shared/player.js").Player;
     worldDescription?: string;
     cardWorldbook?: unknown;
     worldbook?: unknown;
@@ -34,6 +35,8 @@ export function buildContext(
     extraInstruction?: string;
   } = {},
 ) {
+  const expand = (text: string, name: string) =>
+    expandText(text, name, options.player?.name);
   const data = card.data;
   const world = options.worldbook
     ? evaluateBook(options.worldbook, history, input, options.scanDepth, {
@@ -115,6 +118,15 @@ export function buildContext(
         });
       if (boundary < chat.length) injected.push(chat[boundary]);
     }
+    const identity: Message[] =
+      options.player && (options.player.name || options.player.description)
+        ? [
+            {
+              role: "system",
+              content: `玩家身份（用户扮演）：${options.player.name || "玩家"}\n${options.player.description}`,
+            },
+          ]
+        : [];
     const worldDescription: Message[] = options.worldDescription
       ? [
           {
@@ -129,6 +141,7 @@ export function buildContext(
     if (!preset?.prompts)
       return [
         ...worldDescription,
+        ...identity,
         system,
         ...injected,
         ...tail.slice(1),
@@ -153,7 +166,7 @@ export function buildContext(
       ],
       chatHistory: injected,
     };
-    const result: Message[] = [...worldDescription];
+    const result: Message[] = [...worldDescription, ...identity];
     for (const item of order.filter((item) => item.enabled)) {
       const prompt = preset.prompts.find(
         (prompt) => prompt.identifier === item.identifier,

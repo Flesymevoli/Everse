@@ -1,8 +1,10 @@
+import { playerSchema, withPlayer } from "../shared/player.js";
 import { z } from "zod";
 import { importBook } from "./worldbook.js";
 import { importWorld, worldSchema } from "./worlds.js";
 export const worldEditSchema = z
   .object({
+    player: playerSchema.optional(),
     name: z.string().trim().min(1).max(100),
     description: z.string().max(100000),
     first_mes: z.string().max(100000),
@@ -19,11 +21,17 @@ export function editWorld(item: ReturnType<typeof importWorld>, raw: unknown) {
     (standalone
       ? original
       : (original.data as Record<string, unknown>).worldbook);
-  const metadata = {
+  const metadataBase = {
     name: patch.name,
     description: patch.description,
     first_mes: patch.first_mes,
   };
+  const existingData = standalone
+    ? ((original._yunotavern ?? {}) as Record<string, unknown>)
+    : (original.data as Record<string, unknown>);
+  const metadata = patch.player
+    ? withPlayer({ ...existingData, ...metadataBase }, patch.player)
+    : metadataBase;
   // Keep ST entries and all unknown fields at their original paths. App-only metadata is namespaced.
   const updated = standalone
     ? {

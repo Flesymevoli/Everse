@@ -1,3 +1,5 @@
+import { createWork } from "./creation.js";
+import { readPlayer, withPlayer, playerSchema } from "../shared/player.js";
 import { editWorld } from "./world-edit.js";
 import { ConnectionVault } from "./connection-vault.js";
 import { windowsProtector, type SecretProtector } from "./secrets.js";
@@ -83,6 +85,9 @@ export function createApp(
     vault.clearKey(c.req.param("id"));
     return c.json({ ok: true });
   });
+  app.post("/api/creations", async (c) =>
+    c.json(createWork(store, await c.req.json())),
+  );
   app.get("/api/worlds", (c) => c.json(store.worlds()));
   app.post("/api/worlds", async (c) => {
     const body = z
@@ -291,6 +296,7 @@ export function createApp(
         personality: z.string().max(100000).optional(),
         scenario: z.string().max(100000).optional(),
         first_mes: z.string().max(100000).optional(),
+        player: playerSchema.optional(),
       })
       .strict()
       .parse(await c.req.json());
@@ -302,7 +308,13 @@ export function createApp(
     const raw = (item.original ?? item.card) as Record<string, unknown> & {
       data: Record<string, unknown>;
     };
-    const updated = importCard({ ...raw, data: { ...raw.data, ...patch } });
+    const { player, ...fields } = patch;
+    const updated = importCard({
+      ...raw,
+      data: player
+        ? withPlayer({ ...raw.data, ...fields }, player)
+        : { ...raw.data, ...fields },
+    });
     store.updateCard(id, updated);
     return c.json({ id, ...updated });
   });
@@ -333,7 +345,16 @@ export function createApp(
     const id = store.create(
       cardId,
       opening
-        ? [{ role: "assistant", content: expand(opening, card.data.name) }]
+        ? [
+            {
+              role: "assistant",
+              content: expand(
+                opening,
+                card.data.name,
+                (readPlayer(world?.world.data) ?? readPlayer(card.data))?.name,
+              ),
+            },
+          ]
         : [],
     );
     if (worldId) store.setOptions(id, { worldId });
@@ -354,7 +375,7 @@ export function createApp(
       return c.json({ error: "已有剧情，不能再替换开场；请新建存档" }, 409);
     const item = store.cards().find((x) => x.id === session.cardId);
     if (!item) throw new Error("作品不存在");
-    const options = greetings(item.card);
+    const options = greetings(item.card, readPlayer(item.card.data)?.name);
     if (index >= options.length) return c.json({ error: "开场不存在" }, 400);
     store.save(
       id,
@@ -437,6 +458,7 @@ export function createApp(
       history = history.slice(0, -2);
     } else if (!input) throw new Error("请输入内容");
     const prompt = buildContext(runtimeCard, history, input, budget, reserve, {
+      player: readPlayer(worldCard?.world.data) ?? readPlayer(runtimeCard.data),
       worldDescription: worldCard?.world.data.description,
       cardWorldbook: worldCard?.world.data.worldbook,
       worldbook: worldbook?.original,

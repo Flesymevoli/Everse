@@ -1,3 +1,4 @@
+import { readPlayer } from "../shared/player.js";
 import { z } from "zod";
 import { cardSchema, type Card } from "./cards.js";
 import { bookSchema, importBook } from "./worldbook.js";
@@ -36,7 +37,11 @@ export function importWorld(raw: unknown, name = "导入的世界书") {
     if (!["spec", "data"].includes(k)) warnings.push("保留但未执行 world." + k);
   for (const k of Object.keys(world.data))
     if (!["name", "description", "first_mes", "worldbook"].includes(k))
-      warnings.push("保留但未执行 world.data." + k);
+      warnings.push(
+        k === "extensions" && readPlayer(world.data)
+          ? "extensions.yunotavern.player 用作玩家身份；其他扩展保留但不执行"
+          : "保留但未执行 world.data." + k,
+      );
   return { world, warnings, original: structuredClone(raw) };
 }
 export function combinedCard(

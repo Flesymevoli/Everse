@@ -1,3 +1,4 @@
+import { readPlayer } from "../shared/player.js";
 import { z } from "zod";
 const entry = z
   .object({
@@ -46,7 +47,12 @@ export function importCard(raw: unknown) {
     "character_book",
   ]);
   for (const key of Object.keys(card.data))
-    if (!known.has(key)) warnings.push("保留但未使用 data." + key);
+    if (!known.has(key))
+      warnings.push(
+        key === "extensions" && readPlayer(card.data)
+          ? "extensions.yunotavern.player 用作玩家身份；其他扩展保留但不执行"
+          : "保留但未使用 data." + key,
+      );
   for (const key of Object.keys(card))
     if (!["spec", "spec_version", "data"].includes(key))
       warnings.push("保留但未使用 " + key);
