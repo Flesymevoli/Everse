@@ -6,6 +6,8 @@ import {
   recoverOpening,
 } from "./preparation.js";
 import { randomUUID } from "node:crypto";
+import { textSelectionSchema } from "../shared/text-edit.js";
+import { editRevision, selectedText, rewriteRequest } from "./text-edit.js";
 import { generateOpeningGuide } from "./opening-guide.js";
 import { guideAnswers } from "../shared/opening-guide.js";
 import { directorSchema, directorInstruction } from "../shared/director.js";
@@ -560,6 +562,154 @@ export function createApp(
       ),
     );
   });
+  app.post("/api/sessions/:id/rewrite-preview", async (c) => {
+    const id = c.req.param("id"),
+      body = turn
+        .pick({ config: true, connectionId: true, budget: true, reserve: true })
+        .extend({
+          selection: textSelectionSchema,
+          instruction: z.string().trim().min(1).max(4000),
+        })
+        .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    if (body.connectionId && !body.config.mock)
+      body.config = await vault.config(body.connectionId);
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    const request = rewriteRequest(
+        store,
+        id,
+        body.selection,
+        body.instruction,
+        body.config,
+        body.budget,
+        body.reserve,
+      ),
+      controller = new AbortController();
+    busy.add(id);
+    controllers.set(id, controller);
+    let output = "",
+      usage: Usage | null = null,
+      status = "failed";
+    const started = Date.now();
+    try {
+      for await (const chunk of generate(
+        request.config,
+        request.prompt.messages,
+        request.maxTokens,
+        controller.signal,
+        (value) => {
+          usage = value;
+        },
+      )) {
+        output += chunk;
+        if (output.length > 100000) throw new Error("改写过长，请缩小选区");
+      }
+      controller.signal.throwIfAborted();
+      selectedText(store, id, body.selection);
+      if (!output.trim()) throw new Error("未返回改写正文");
+      status = "preview";
+      return c.json({ replacement: output, prompt: request.prompt });
+    } catch (error) {
+      return c.json(
+        {
+          error: controller.signal.aborted
+            ? "已取消改写，原文未变。"
+            : "改写未完成，原文和已有预览未变；没有自动重试。",
+        },
+        400,
+      );
+    } finally {
+      busy.delete(id);
+      controllers.delete(id);
+      store.db
+        .prepare("INSERT INTO model_usage(sessionId,body) VALUES (?,?)")
+        .run(
+          id,
+          JSON.stringify({
+            purpose: "rewrite-preview",
+            model: body.config.model,
+            mock: body.config.mock,
+            usage,
+            status,
+            elapsedMs: Date.now() - started,
+          }),
+        );
+    }
+  });
+  app.post("/api/sessions/:id/edit-selection", async (c) => {
+    const id = c.req.param("id"),
+      body = z
+        .object({
+          selection: textSelectionSchema,
+          replacement: z.string().max(100000),
+          fact: z.string().trim().max(600).default(""),
+        })
+        .strict()
+        .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    const { session, message } = selectedText(store, id, body.selection);
+    const content =
+      message.content.slice(0, body.selection.start) +
+      body.replacement +
+      message.content.slice(body.selection.end);
+    if (!content.trim() || content.length > 100000)
+      throw new Error("修改后正文不能为空或超过10万字符");
+    const edited = {
+      ...message,
+      content,
+      suggestions: [],
+      story: undefined,
+      warning:
+        "本段已编辑，相关旧状态与后续派生记忆按版本失效。后续已有剧情不会自动重写；若涉及事实变化，请核对后续正文及玩家引导。",
+    };
+    if (message.variants || message.st?.swipes) {
+      const index = activeVariant(message);
+      edited.variants = variantsOf(message).map((v, i) =>
+        i === index
+          ? {
+              ...v,
+              content,
+              suggestions: [],
+              story: undefined,
+              warning: edited.warning,
+            }
+          : v,
+      );
+      session.messages[body.selection.index] = selectVariant(edited, index);
+    } else session.messages[body.selection.index] = edited;
+    store.edit(
+      id,
+      session.messages,
+      body.fact ? { key: `edit:${randomUUID()}`, value: body.fact } : undefined,
+    );
+    return c.json({ ok: true });
+  });
+  app.get("/api/sessions/:id/edit-undo-preview", (c) => {
+    const id = c.req.param("id"),
+      session = store.session(id),
+      row = store.db
+        .prepare(
+          "SELECT messages,expected FROM revisions WHERE sessionId=? ORDER BY id DESC LIMIT 1",
+        )
+        .get(id);
+    if (!row || row.expected !== JSON.stringify(session.messages))
+      throw new Error(
+        "没有可直接恢复的版本；编辑后已有新进度时不能直接撤销，请在分支中手动调整旧内容。",
+      );
+    const previous = JSON.parse(
+      String(row.messages),
+    ) as typeof session.messages;
+    const index = previous.findIndex(
+      (m, i) => m.content !== session.messages[i]?.content,
+    );
+    if (index < 0) throw new Error("没有正文差异可以预览");
+    return c.json({
+      index,
+      before: session.messages[index].content,
+      after: previous[index].content,
+      revision: editRevision(store, id),
+    });
+  });
   app.post("/api/sessions/:id/edit", async (c) => {
     const id = c.req.param("id");
     const body = z
@@ -597,9 +747,14 @@ export function createApp(
     store.edit(id, session.messages);
     return c.json(store.session(id));
   });
-  app.post("/api/sessions/:id/undo", (c) => {
+  app.post("/api/sessions/:id/undo", async (c) => {
     const id = c.req.param("id");
+    const body = z
+      .object({ revision: z.string().length(64).optional() })
+      .parse(await c.req.json().catch(() => ({})));
     if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    if (body.revision && body.revision !== editRevision(store, id))
+      return c.json({ error: "正文或状态已变化，请重新预览恢复内容" }, 409);
     store.undo(id);
     return c.json(store.session(id));
   });
@@ -725,6 +880,7 @@ export function createApp(
       ...store.session(id),
       story: store.story(id),
       draft: store.draft(id),
+      editRevision: editRevision(store, id),
     });
   });
   app.get("/api/sessions/:id/story", (c) =>

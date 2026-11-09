@@ -179,7 +179,7 @@ export function StoryPanel({
           )}
           {story.facts.map((fact) => (
             <section className="character-section" key={fact.key}>
-              <h3>{fact.key}</h3>
+              <h3>{fact.key.startsWith("edit:")?"正文编辑 · 事实修订":fact.key}</h3>
               <p>{fact.value}</p>
               <small>
                 {fact.corrected

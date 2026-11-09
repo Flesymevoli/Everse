@@ -178,7 +178,11 @@ export class Store {
       )
       .run(id, JSON.stringify(options));
   }
-  edit(id: string, messages: Message[]) {
+  edit(
+    id: string,
+    messages: Message[],
+    factCorrection?: { key: string; value: string },
+  ) {
     const old = this.session(id);
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -188,6 +192,18 @@ export class Store {
         )
         .run(id, JSON.stringify(old.messages), JSON.stringify(messages));
       this.save(id, messages);
+      if (factCorrection)
+        this.db
+          .prepare(
+            "INSERT INTO story_corrections(sessionId,anchor,count,key,value) VALUES (?,?,?,?,?)",
+          )
+          .run(
+            id,
+            historyKey(messages),
+            messages.length,
+            factCorrection.key,
+            factCorrection.value,
+          );
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -208,7 +224,7 @@ export class Store {
           JSON.stringify(this.session(id).messages)) ||
       previous.length !== this.session(id).messages.length
     )
-      throw new Error("编辑后已有新剧情，不能撤销覆盖；请先创建分支");
+      throw new Error("编辑后已有新剧情，不能撤销覆盖；请在分支中手动调整旧内容");
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.save(id, JSON.parse(String(revision.messages)));

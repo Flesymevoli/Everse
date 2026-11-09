@@ -24,6 +24,8 @@ import {
 } from "./connections";
 import { Management } from "./Management";
 import { SaveSettings } from "./SaveSettings";
+import { TextEditor } from "./TextEditor";
+import type { TextSelection } from "../shared/text-edit";
 import { visibleStory } from "../shared/story";
 type Work = { id: string; card: Card; warnings: string[] };
 type Save = {
@@ -47,6 +49,12 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 function App() {
+  const [textEdit, setTextEdit] = useState<{
+    selection: TextSelection;
+    message: string;
+    restore?: boolean;
+    replacement?: string;
+  } | null>(null);
   const [saveSettings, setSaveSettings] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [storyPanel, setStoryPanel] = useState(
@@ -477,6 +485,38 @@ function App() {
           ) : (
             <>
               <ReadingView
+                onEdit={(selection) => {
+                  if (loadedSession?.editRevision)
+                    setTextEdit({
+                      selection: {
+                        ...selection,
+                        revision: loadedSession.editRevision,
+                      },
+                      message: messages[selection.index].content,
+                    });
+                }}
+                onUndo={() =>
+                  void action(async () => {
+                    const preview = await api<{
+                      index: number;
+                      before: string;
+                      after: string;
+                      revision: string;
+                    }>(`sessions/${session}/edit-undo-preview`);
+                    setTextEdit({
+                      selection: {
+                        index: preview.index,
+                        start: 0,
+                        end: preview.before.length,
+                        original: preview.before,
+                        revision: preview.revision,
+                      },
+                      message: preview.before,
+                      restore: true,
+                      replacement: preview.after,
+                    });
+                  })
+                }
                 busy={busy}
                 onRegenerate={() => void send("regenerate")}
                 onSwipe={(messageIndex, index) =>
@@ -700,6 +740,51 @@ function App() {
             onClose={() => setStoryPanel(false)}
           />
         </>
+      )}
+      {textEdit && (
+        <TextEditor
+          key={session}
+          selection={textEdit.selection}
+          message={textEdit.message}
+          restore={textEdit.restore}
+          initialReplacement={textEdit.replacement}
+          mock={connections.selectedId === null}
+          onClose={() => setTextEdit(null)}
+          onStop={() => api(`sessions/${session}/stop`, {})}
+          onGenerate={async (instruction) => {
+            setBusy(true);
+            try {
+              return await api(`sessions/${session}/rewrite-preview`, {
+                selection: textEdit.selection,
+                instruction,
+                config: resolveConnection(connections),
+                ...(!automaticBudget ? { budget, reserve } : {}),
+                connectionId: connections.profiles.find(
+                  (p) => p.id === connections.selectedId,
+                )?.saved
+                  ? connections.selectedId
+                  : undefined,
+              });
+            } finally {
+              setBusy(false);
+            }
+          }}
+          onSave={async (replacement, fact) => {
+            await api(
+              `sessions/${session}/${textEdit.restore ? "undo" : "edit-selection"}`,
+              textEdit.restore
+                ? { revision: textEdit.selection.revision }
+                : { selection: textEdit.selection, replacement, fact },
+            );
+            await load(session);
+            setTextEdit(null);
+            setNotice(
+              textEdit.restore
+                ? "已恢复编辑前版本，相应状态按来源恢复。"
+                : "已替换选区，原版本已备份；可预览并恢复最近编辑。请核对涉及的后续剧情与世界引导。",
+            );
+          }}
+        />
       )}
       {saveSettings && (
         <SaveSettings

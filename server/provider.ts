@@ -28,6 +28,11 @@ export async function* generate(
   onUsage?: (usage: Usage) => void,
 ): AsyncGenerator<string> {
   if (config.mock) {
+    if (messages.some((m) => m.content.includes("EVERSE_LOCAL_REWRITE"))) {
+      yield "【模拟改写】灯光穿过细雨，落在沉默的石桥上。";
+      onUsage?.({ input: 0, output: 0, cached: 0 });
+      return;
+    }
     if (messages[0]?.content.startsWith("YUNO_OPENING_GUIDE")) {
       const evidence = messages[1].content
         .split(/\n/)

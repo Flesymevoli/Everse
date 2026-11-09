@@ -88,3 +88,9 @@ server/creation.ts 校验简单表单并映射到现有 V2 角色卡或 yuno_wor
 安装入口 `start.cmd` 使用校验后的私有 Node，`scripts/launcher.mjs` 以锁文件和源码指纹控制安装/构建；普通运行由 server/index.ts 在同一回环端口服务 dist 与 API，开发模式仍分离。不改变默认 data 路径。
 
 完整模型正文与辅助状态校验解耦：parseNarrative 只对 StoryFormatError 降级，保存正文、原始输出和 warning，不采纳坏状态。API 失败、取消、截断、空正文以及事务错误不会伪装成功。Swipe 保留各候选警告。过期引导不阻断正文，当前设定优先。自然语言重要设定由玩家明确点击保存进入已有 director，不增加模型调用。后续边界见 AGENT-ALPHA.md。
+
+## 局部编辑数据流
+
+ReadingView 用原文偏移定位同一回复内选区，TextEditor 管理预览和确认。shared/text-edit.ts 校验输入；server/text-edit.ts 以正文、状态修订和引导版本计算冲突标识，并复用已有上下文、预设和模型参数。改写仅发送选区、前后各最多 2000 字符及相关设定，不发送全部历史；不是全历史语义审校。
+
+rewrite-preview 单次生成，不写正文，沿用生成锁和停止机制；edit-selection 校验版本与原文后，只替换准确范围。在一个 SQLite 事务内保留旧消息、更新正文及可选的玩家事实修订。旧派生状态按历史锚点失效，当前 Swipe 同步更新，其他候选保留。undo 只在正文未继续变化时恢复；恢复原文后对应旧状态重新有效，新事实修订失效。不存在自动收费记忆修复或重写后续情节。

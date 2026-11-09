@@ -9,6 +9,7 @@ import { expand } from "../shared/character-text";
 import { DocumentPlanEditor } from "./DocumentPlanEditor";
 import type { OpeningGuide } from "../shared/opening-guide";
 export type PreparingSession = {
+  editRevision?: string;
   story?: import("../shared/story").StoryView;
   draft?: { raw: string; input: string; error: string } | null;
   id: string;
