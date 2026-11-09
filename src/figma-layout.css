@@ -1,6 +1,6 @@
 /* Everse application theme. Source: Figma Reader 2:2; see docs/STYLE-GUIDE.md. */
 :root {
-  --font-app: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-app: "Noto Serif SC", "Songti SC", SimSun, Georgia, serif;
   --paper: #fbfaf6;
   --sidebar: #f3f0e9;
   --ink: #2e2a26;
