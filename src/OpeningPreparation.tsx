@@ -129,6 +129,14 @@ export function OpeningPreparation({
       onBusy(false);
     }
   }
+  function generateOpening() {
+    void run(async () => {
+      setGenerating(true);
+      const result = await onGenerate(draft);
+      setDraft({ ...draft, opening: result.opening });
+      setNotice("开场已生成，请预览或编辑后确认开始。");
+    });
+  }
   return (
     <section className="settings opening-preparation" aria-label="开局准备">
       <h2>开局准备</h2>
@@ -367,17 +375,7 @@ export function OpeningPreparation({
           </label>
           <div className="opening-model">
             {modelControl}
-            <button
-              type="button"
-              onClick={() =>
-                void run(async () => {
-                  setGenerating(true);
-                  const result = await onGenerate(draft);
-                  setDraft({ ...draft, opening: result.opening });
-                  setNotice("开场已生成，请预览或编辑后确认开始。");
-                })
-              }
-            >
+            <button type="button" onClick={generateOpening}>
               {mock ? "用模拟模型生成开场" : "用所选 API 生成开场"}
             </button>
           </div>
@@ -395,14 +393,29 @@ export function OpeningPreparation({
               <p>选择、编写或生成开场后，这里会显示第一幕。</p>
             )}
           </section>
+          {!draft.opening.trim() && (
+            <p id="opening-next-step">
+              还缺少开场剧情。可以在上方手写，或点击下方按钮生成并预览。
+              {mock
+                ? "当前为免费模拟模型。"
+                : "生成将调用当前选择的 API，可能产生费用。"}
+            </p>
+          )}
           <div className="form-actions">
-            <button
-              type="submit"
-              className="primary"
-              disabled={!draft.opening.trim()}
-            >
-              确认开始故事
-            </button>
+            {draft.opening.trim() ? (
+              <button type="submit" className="primary">
+                确认开始故事
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="primary"
+                aria-describedby="opening-next-step"
+                onClick={generateOpening}
+              >
+                生成开场并预览
+              </button>
+            )}
             <button
               type="button"
               onClick={() =>
@@ -415,6 +428,11 @@ export function OpeningPreparation({
               保存准备，稍后开始
             </button>
           </div>
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
         </fieldset>
       </form>
       {generating && (
