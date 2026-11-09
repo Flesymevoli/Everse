@@ -2,23 +2,19 @@ import { variantsOf, activeVariant } from "../shared/swipes";
 import type { Message } from "../server/context";
 import { readingDraft, textSuggestions } from "../server/suggestions";
 import { visibleStory } from "../shared/story";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import type { TextSelection } from "../shared/text-edit";
 type RangeSelection = Omit<TextSelection, "revision">;
-function paragraphs(text: string) {
-  const result: { text: string; start: number }[] = [];
-  const pattern = /\n\s*\n/g;
-  let start = 0,
-    match;
-  while ((match = pattern.exec(text))) {
-    result.push({ text: text.slice(start, match.index), start });
-    start = pattern.lastIndex;
-  }
-  result.push({ text: text.slice(start), start });
-  return result;
-}
-
+import { paragraphs, textDiff } from "./text-editing";
 interface Props {
+  editSelection?: RangeSelection;
+  editPreview?: string | null;
+  highlight?: {
+    index: number;
+    start: number;
+    end: number;
+    content: string;
+  } | null;
   busy: boolean;
   onRegenerate: () => void;
   onSwipe: (messageIndex: number, index: number) => void;
@@ -32,6 +28,9 @@ interface Props {
   onUndo: () => void;
 }
 export function ReadingView({
+  editSelection,
+  editPreview,
+  highlight,
   busy,
   onRegenerate,
   onSwipe,
@@ -44,32 +43,26 @@ export function ReadingView({
   onEdit,
   onUndo,
 }: Props) {
-  const prose = useRef<HTMLElement>(null),
-    [selection, setSelection] = useState<
-      (RangeSelection & { left: number; top: number }) | null
-    >(null);
+  const prose = useRef<HTMLElement>(null);
+  const onEditRef = useRef(onEdit);
+  onEditRef.current = onEdit;
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
     const capture = () => {
-      if (busy) {
-        setSelection(null);
-        return;
-      }
+      if (busy || editSelection) return;
       const selected = window.getSelection();
-      if (!selected || selected.isCollapsed || !selected.rangeCount) {
-        setSelection(null);
-        return;
-      }
-      const range = selected.getRangeAt(0),
-        element = (node: Node) =>
-          node.nodeType === Node.ELEMENT_NODE
-            ? (node as Element)
-            : node.parentElement;
+      if (!selected || selected.isCollapsed || !selected.rangeCount) return;
+      const range = selected.getRangeAt(0);
+      const element = (node: Node) =>
+        node.nodeType === Node.ELEMENT_NODE
+          ? (node as Element)
+          : node.parentElement;
       const a = element(range.startContainer)?.closest<HTMLElement>(
-          "p[data-text-start]",
-        ),
-        b = element(range.endContainer)?.closest<HTMLElement>(
-          "p[data-text-start]",
-        );
+        "p[data-text-start]",
+      );
+      const b = element(range.endContainer)?.closest<HTMLElement>(
+        "p[data-text-start]",
+      );
       const owner = a?.closest<HTMLElement>("[data-narrative-index]");
       if (
         !a ||
@@ -77,37 +70,29 @@ export function ReadingView({
         !owner ||
         owner !== b.closest("[data-narrative-index]") ||
         !prose.current?.contains(owner)
-      ) {
-        setSelection(null);
+      )
         return;
-      }
-      const offset = (p: HTMLElement, node: Node, n: number) => {
-        const r = document.createRange();
-        r.selectNodeContents(p);
-        r.setEnd(node, n);
-        return Number(p.dataset.textStart) + r.toString().length;
-      };
-      const index = Number(owner.dataset.narrativeIndex),
-        start = offset(a, range.startContainer, range.startOffset),
-        end = offset(b, range.endContainer, range.endOffset),
-        original = messages[index]?.content.slice(start, end);
-      if (!original?.trim()) {
-        setSelection(null);
-        return;
-      }
-      const rect = range.getBoundingClientRect();
-      setSelection({
-        index,
-        start,
-        end,
-        original,
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 160)),
-        top: Math.max(70, Math.min(rect.top - 48, window.innerHeight - 60)),
-      });
+      const index = Number(owner.dataset.narrativeIndex);
+      const start = Number(a.dataset.textStart);
+      // A rough gesture selects complete touched paragraphs, not individual letters.
+      const end = Number(b.dataset.textStart) + (b.textContent?.length ?? 0);
+      const original = messages[index]?.content.slice(start, end);
+      if (!original?.trim()) return;
+      onEditRef.current({ index, start, end, original });
+      selected.removeAllRanges();
     };
-    document.addEventListener("selectionchange", capture);
-    return () => document.removeEventListener("selectionchange", capture);
-  }, [busy, messages]);
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(capture, 250);
+    };
+    document.addEventListener("pointerup", schedule);
+    document.addEventListener("keyup", schedule);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("pointerup", schedule);
+      document.removeEventListener("keyup", schedule);
+    };
+  }, [busy, messages, editSelection]);
   const choices =
     !generating && suggestionsEnabled
       ? messages.at(-1)?.suggestions?.length
@@ -119,21 +104,6 @@ export function ReadingView({
   );
   return (
     <>
-      {selection && !busy && (
-        <button
-          className="selection-edit"
-          style={{ left: selection.left, top: selection.top }}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => {
-            const {left:_left,top:_top,...range}=selection;
-            onEdit(range);
-            window.getSelection()?.removeAllRanges();
-            setSelection(null);
-          }}
-        >
-          修改选中文本
-        </button>
-      )}
       <section ref={prose} className="prose" aria-label="小说正文">
         {messages.map((message, index) => (
           <article
@@ -152,11 +122,71 @@ export function ReadingView({
               </p>
             ) : (
               <div data-narrative-index={index}>
-                {paragraphs(message.content).map((paragraph, i) => (
-                  <p key={i} data-text-start={paragraph.start}>
-                    {paragraph.text}
-                  </p>
-                ))}
+                {paragraphs(message.content).map((paragraph, i, parts) => {
+                  const selected =
+                    editSelection?.index === index &&
+                    paragraph.start < editSelection.end &&
+                    paragraph.start + paragraph.text.length >
+                      editSelection.start;
+                  const last =
+                    selected &&
+                    !parts
+                      .slice(i + 1)
+                      .some(
+                        (p) =>
+                          p.text.length > 0 &&
+                          p.start < editSelection!.end &&
+                          p.start + p.text.length > editSelection!.start,
+                      );
+                  const first =
+                    selected && paragraph.start <= editSelection!.start;
+                  const diff =
+                    first && editPreview != null
+                      ? textDiff(editSelection!.original, editPreview)
+                      : null;
+                  const marked =
+                    highlight?.index === index &&
+                    highlight.content === message.content;
+                  const markStart = marked
+                    ? Math.max(0, highlight.start - paragraph.start)
+                    : 0;
+                  const markEnd = marked
+                    ? Math.min(
+                        paragraph.text.length,
+                        highlight.end - paragraph.start,
+                      )
+                    : 0;
+                  return (
+                    <Fragment key={i}>
+                      {!selected || editPreview == null ? (
+                        <p
+                          data-text-start={paragraph.start}
+                          className={selected ? "editing-scope" : undefined}
+                        >
+                          {marked && markEnd > markStart ? (
+                            <>
+                              {paragraph.text.slice(0, markStart)}
+                              <mark className="edit-added">
+                                {paragraph.text.slice(markStart, markEnd)}
+                              </mark>
+                              {paragraph.text.slice(markEnd)}
+                            </>
+                          ) : (
+                            paragraph.text
+                          )}
+                        </p>
+                      ) : first && diff ? (
+                        <p className="inline-diff" aria-label="正文修改预览">
+                          {diff.prefix}
+                          <del>{diff.removed}</del>
+                          <ins>{diff.added}</ins>
+                          {diff.suffix}
+                        </p>
+                      ) : null}
+                      {last && <div id="inline-text-editor-anchor" />}
+                    </Fragment>
+                  );
+                })}
               </div>
             )}
             <button

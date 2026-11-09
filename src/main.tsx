@@ -1,4 +1,5 @@
 import { readJson } from "./response";
+import { textDiff } from "./text-editing";
 import {
   OpeningPreparation,
   type PreparingSession,
@@ -54,6 +55,14 @@ function App() {
     message: string;
     restore?: boolean;
     replacement?: string;
+  } | null>(null);
+  const [editPreview, setEditPreview] = useState<string | null>(null);
+  const [editedMark, setEditedMark] = useState<{
+    session: string;
+    index: number;
+    start: number;
+    end: number;
+    content: string;
   } | null>(null);
   const [saveSettings, setSaveSettings] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -150,6 +159,8 @@ function App() {
       "sessions/" + id,
     );
     setLoadedSession(s);
+    setTextEdit(null);
+    setEditPreview(null);
     setActiveWorldId(s.options?.worldId ?? null);
     setSession(id);
     setSuggestions(s.suggestions);
@@ -485,7 +496,11 @@ function App() {
           ) : (
             <>
               <ReadingView
+                editSelection={textEdit?.selection}
+                editPreview={editPreview}
+                highlight={editedMark?.session === session ? editedMark : null}
                 onEdit={(selection) => {
+                  setEditPreview(null);
                   if (loadedSession?.editRevision)
                     setTextEdit({
                       selection: {
@@ -743,13 +758,17 @@ function App() {
       )}
       {textEdit && (
         <TextEditor
-          key={session}
+          key={`${session}:${textEdit.selection.index}:${textEdit.selection.start}:${textEdit.restore}`}
+          onPreview={setEditPreview}
           selection={textEdit.selection}
           message={textEdit.message}
           restore={textEdit.restore}
           initialReplacement={textEdit.replacement}
           mock={connections.selectedId === null}
-          onClose={() => setTextEdit(null)}
+          onClose={() => {
+            setTextEdit(null);
+            setEditPreview(null);
+          }}
           onStop={() => api(`sessions/${session}/stop`, {})}
           onGenerate={async (instruction) => {
             setBusy(true);
@@ -776,8 +795,27 @@ function App() {
                 ? { revision: textEdit.selection.revision }
                 : { selection: textEdit.selection, replacement, fact },
             );
+            const diff = textDiff(textEdit.selection.original, replacement);
+            setEditedMark(
+              textEdit.restore
+                ? null
+                : {
+                    session,
+                    index: textEdit.selection.index,
+                    start: textEdit.selection.start + diff.prefix.length,
+                    end:
+                      textEdit.selection.start +
+                      diff.prefix.length +
+                      diff.added.length,
+                    content:
+                      textEdit.message.slice(0, textEdit.selection.start) +
+                      replacement +
+                      textEdit.message.slice(textEdit.selection.end),
+                  },
+            );
             await load(session);
             setTextEdit(null);
+            setEditPreview(null);
             setNotice(
               textEdit.restore
                 ? "已恢复编辑前版本，相应状态按来源恢复。"

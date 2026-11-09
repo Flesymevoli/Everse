@@ -1163,3 +1163,30 @@ pre {
 .edit-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .text-editor small { display: block; color: var(--muted); }
 .restore-edit { font-size: 12px; color: var(--muted); }
+/* Contextual editing stays inside the reading flow, without a backdrop. */
+.inline-text-editor { margin: 4px 0 28px; padding: 12px 14px; width: min(100%, 560px); box-sizing: border-box; background: #fffcf6; border: 1px solid #ded6c8; border-radius: 14px; box-shadow: 0 6px 22px #30291f12; font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; color: var(--ink); overflow-wrap: anywhere; }
+.inline-edit-heading { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+.inline-edit-heading .muted { flex: 1; }
+.inline-edit-heading button { flex: none; min-width: 36px; min-height: 36px; padding: 4px; }
+.inline-text-editor fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
+.inline-text-editor textarea { width: 100%; box-sizing: border-box; min-height: 68px; max-height: 240px; padding: 8px; border: 0; background: transparent; resize: vertical; font: inherit; color: inherit; }
+.inline-text-editor textarea:focus-visible { outline: 2px solid #9e7560; outline-offset: 0; border-radius: 5px; }
+.inline-edit-tools, .inline-edit-tools > div, .inline-edit-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.inline-edit-tools { justify-content: space-between; }
+.inline-text-editor button { min-height: 38px; padding: 6px 10px; font: inherit; }
+.inline-edit-tools .edit-send { width: 38px; border-radius: 50%; padding: 0; }
+.inline-edit-details { font-size: 12px; margin-top: 8px; color: var(--muted); }
+.inline-edit-details summary { cursor: pointer; padding: 6px 0; }
+.inline-edit-details label { display: block; }
+.inline-edit-foot { justify-content: space-between; color: var(--muted); margin-top: 4px; font-size: 12px; }
+.prose .editing-scope { background: #e9dfcd70; border-radius: 3px; }
+.prose .inline-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
+.inline-diff del { background: #f4eae4; color: #916d5c; text-decoration: line-through; }
+.inline-diff ins, .edit-added { background: #eddbce; color: #794b36; text-decoration: underline; text-decoration-color: #aa7357; text-underline-offset: 4px; }
+.edit-legend { font: 12px/1.6 "Segoe UI", sans-serif !important; color: var(--muted); margin: 4px 0 8px !important; }
+.edit-legend span:first-child { color: #916d5c; text-decoration: line-through; }
+.edit-legend span:nth-child(2) { color: #794b36; }
+@media (max-width: 520px) { .inline-text-editor { padding: 10px; } .inline-text-editor button { min-height: 44px; } .inline-edit-heading { flex-wrap: wrap; } }
+.inline-text-editor .inline-edit-details { margin: 6px 0 0; }
+.inline-text-editor .inline-edit-details summary { min-height: 32px; box-sizing: border-box; }
+.inline-text-editor .edit-legend { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { TextSelection } from "../shared/text-edit";
 export function TextEditor({
   selection,
@@ -10,6 +11,7 @@ export function TextEditor({
   onSave,
   onStop,
   onClose,
+  onPreview,
 }: {
   selection: TextSelection;
   message: string;
@@ -22,21 +24,26 @@ export function TextEditor({
   onSave: (replacement: string, fact: string) => Promise<void>;
   onStop: () => Promise<void>;
   onClose: () => void;
+  onPreview: (text: string | null) => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null),
-    [instruction, setInstruction] = useState(""),
-    [replacement, setReplacement] = useState(
-      initialReplacement ?? selection.original,
-    ),
-    [fact, setFact] = useState(""),
-    [reviewed, setReviewed] = useState(!!restore),
-    [working, setWorking] = useState(false),
-    [generating, setGenerating] = useState(false),
-    [error, setError] = useState(""),
-    [prompt, setPrompt] = useState<unknown>(null);
-  useEffect(() => {
-    dialog.current?.showModal();
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const [instruction, setInstruction] = useState("");
+  const [replacement, setReplacement] = useState(
+    initialReplacement ?? selection.original,
+  );
+  const [manual, setManual] = useState(false);
+  const [fact, setFact] = useState("");
+  const [reviewed, setReviewed] = useState(!!restore);
+  const [working, setWorking] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
+  const [prompt, setPrompt] = useState<unknown>(null);
+  useLayoutEffect(() => {
+    setHost(document.getElementById("inline-text-editor-anchor"));
   }, []);
+  useEffect(() => {
+    onPreview(reviewed ? replacement : null);
+  }, [reviewed, replacement, onPreview]);
   async function run(fn: () => Promise<void>) {
     setWorking(true);
     setError("");
@@ -53,156 +60,179 @@ export function TextEditor({
     message.slice(0, selection.start) +
     replacement +
     message.slice(selection.end);
-  return (
-    <dialog
-      ref={dialog}
-      className="settings text-editor"
-      aria-labelledby="text-editor-title"
-      onCancel={(e) => {
-        if (working) e.preventDefault();
-        else onClose();
+  if (!host) return null;
+  return createPortal(
+    <section
+      className="inline-text-editor"
+      role="region"
+      aria-label={restore ? "恢复原版本" : "局部改写"}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !working) {
+          e.stopPropagation();
+          onClose();
+        }
       }}
     >
-      <div className="panel-heading">
-        <h2 id="text-editor-title">
-          {restore ? "恢复原版本" : "修改选中文本"}
-        </h2>
+      <div className="inline-edit-heading">
+        <span>{restore ? "恢复预览" : "修改这几段"}</span>
+        <span className="muted">
+          {restore ? "确认后恢复" : "已包含选区所在的完整段落"}
+        </span>
         <button aria-label="关闭正文编辑" disabled={working} onClick={onClose}>
           ×
         </button>
       </div>
-      <p className="muted">
-        只替换所选范围；确认前存档不变。一次选择支持同一条回复中的多个段落。
-      </p>
       {error && (
         <p role="alert" className="error">
           {error}
         </p>
       )}
       <fieldset disabled={working}>
-        <details>
-          <summary>所选原文</summary>
-          <pre className="edit-preview">{selection.original}</pre>
-        </details>
         {!restore && (
           <>
-            <label>
-              改写要求
-              <textarea
-                aria-label="改写要求"
-                maxLength={4000}
-                value={instruction}
-                onChange={(e) => setInstruction(e.target.value)}
-                placeholder="例如：保留事件，增加环境描写；或改为她没有离开。"
-              />
-            </label>
-            <div className="edit-presets">
-              {[
-                "润色，保留原意",
-                "扩写细节，保留原有事实",
-                "删减冗余，保留关键信息",
-                "修改剧情：",
-              ].map((text) => (
-                <button
-                  type="button"
-                  key={text}
-                  onClick={() => setInstruction(text)}
-                >
-                  {text.split(/[，：]/)[0]}
-                </button>
-              ))}
-            </div>
-            <button
-              disabled={!instruction.trim()}
-              onClick={() =>
-                void run(async () => {
-                  setGenerating(true);
-                  const value = await onGenerate(instruction);
-                  setReplacement(value.replacement);
-                  setPrompt(value.prompt);
-                  setReviewed(true);
-                })
-              }
-            >
-              AI 生成预览
-            </button>
-            <small>
-              {mock ? "当前为免费模拟模型。" : "使用当前 API，可能产生费用。"}
-              不自动重试，失败保留现有编辑。
-            </small>
+            {!manual && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!instruction.trim()) return;
+                  void run(async () => {
+                    setGenerating(true);
+                    const value = await onGenerate(instruction);
+                    setReplacement(value.replacement);
+                    setPrompt(value.prompt);
+                    setReviewed(true);
+                  });
+                }}
+              >
+                <textarea
+                  aria-label="改写要求"
+                  rows={2}
+                  maxLength={4000}
+                  value={instruction}
+                  onChange={(e) => setInstruction(e.target.value)}
+                  placeholder="想怎么改？例如：氛围轻松一些，让她留下来……"
+                />
+                <div className="inline-edit-tools">
+                  <div>
+                    {["润色", "扩写", "精简"].map((text) => (
+                      <button
+                        type="button"
+                        key={text}
+                        onClick={() =>
+                          setInstruction(
+                            text + "这几段，保留未涉及的剧情事实。",
+                          )
+                        }
+                      >
+                        {text}
+                      </button>
+                    ))}
+                    <button
+                      className="primary edit-send"
+                      aria-label="生成改写预览"
+                      disabled={!instruction.trim()}
+                    >
+                      ↑
+                    </button>
+                  </div>
+                  <button type="button" onClick={() => setManual(true)}>
+                    手动修改
+                  </button>
+                </div>
+              </form>
+            )}
+            {manual && (
+              <>
+                <textarea
+                  aria-label="替换文本"
+                  rows={4}
+                  maxLength={100000}
+                  value={replacement}
+                  onChange={(e) => {
+                    setReplacement(e.target.value);
+                    setReviewed(false);
+                  }}
+                />
+                <div className="inline-edit-tools">
+                  <button onClick={() => setReviewed(true)}>预览修改</button>
+                  <button onClick={() => setManual(false)}>让 AI 改</button>
+                </div>
+              </>
+            )}
           </>
         )}
-        <label>
-          {restore
-            ? "将恢复的正文"
-            : "替换文本（可以手动编辑，也可清空以删除选区）"}
-          <textarea
-            aria-label="替换文本"
-            readOnly={restore}
-            maxLength={100000}
-            value={replacement}
-            onChange={(e) => {
-              setReplacement(e.target.value);
-              setReviewed(false);
-            }}
-          />
-        </label>
-        {!restore && (
+        {reviewed && (
           <>
+            <p className="edit-legend" role="status">
+              <span>删除线：移除</span>
+              <span>陶土色：新增</span> · 预览未保存
+            </p>
+            <div className="inline-edit-tools">
+              <button
+                className="primary"
+                disabled={
+                  !result.trim() ||
+                  (!restore && replacement === selection.original)
+                }
+                onClick={() => void run(() => onSave(replacement, fact))}
+              >
+                {restore ? "确认恢复原版本" : "接受修改"}
+              </button>
+              <button onClick={onClose}>取消</button>
+              {!restore && !manual && (
+                <button onClick={() => setManual(true)}>再编辑</button>
+              )}
+            </div>
+          </>
+        )}
+        {!restore && (
+          <details className="inline-edit-details">
+            <summary>事实修订与更多</summary>
             <label>
               确认事实修订（可选）
               <textarea
                 aria-label="确认事实修订"
+                rows={2}
                 maxLength={600}
                 value={fact}
                 onChange={(e) => setFact(e.target.value)}
-                placeholder="例如：林仍在书店，并未离开雨城。只有你明确填写并确认后才作为修正记忆保存。"
+                placeholder="若改变了事实，可明确记录，例如：她仍留在书店。"
               />
             </label>
-            <button onClick={() => setReviewed(true)}>预览修改</button>
-          </>
-        )}
-        {reviewed && (
-          <section aria-label="修改预览">
-            <h3>{restore ? "恢复后" : "替换后"}本轮正文</h3>
-            <pre className="edit-preview">{result}</pre>
-            <p className="muted">
-              相关旧状态将按正文版本失效；不会自动重写后续剧情或修改你保存的世界引导。修改早期事实后请检查后续情节。恢复版本也不会覆盖之后新增的剧情。
-            </p>
-          </section>
-        )}
-        {prompt !== null && (
-          <details>
-            <summary>本次发送的上下文</summary>
-            <pre className="edit-preview">
-              {JSON.stringify(prompt, null, 2)}
-            </pre>
+            <small>
+              相关旧派生状态将失效。后续剧情与手工世界引导不会自动重写。
+            </small>
+            {prompt !== null && (
+              <details>
+                <summary>本次上下文</summary>
+                <pre className="edit-preview">
+                  {JSON.stringify(prompt, null, 2)}
+                </pre>
+              </details>
+            )}
           </details>
         )}
-        <div className="form-actions">
-          <button
-            className="primary"
-            disabled={
-              !reviewed ||
-              !result.trim() ||
-              (!restore && replacement === selection.original)
-            }
-            onClick={() => void run(() => onSave(replacement, fact))}
-          >
-            {restore ? "确认恢复原版本" : "确认替换"}
-          </button>
-          <button onClick={onClose}>取消</button>
-        </div>
       </fieldset>
-      {generating && (
-        <button
-          onClick={() =>
-            void onStop().catch(() => setError("停止请求失败，请稍后重试"))
-          }
-        >
-          停止改写
-        </button>
-      )}
-    </dialog>
+      <div className="inline-edit-foot">
+        <small>
+          {working
+            ? "正在处理…"
+            : mock
+              ? "模拟模型 · 不调用付费 API"
+              : "当前 API · 生成可能产生费用"}
+        </small>
+        {generating && (
+          <button
+            onClick={() =>
+              void onStop().catch(() => setError("停止失败，请重试"))
+            }
+          >
+            停止改写
+          </button>
+        )}
+        {!reviewed && !working && <button onClick={onClose}>取消</button>}
+      </div>
+    </section>,
+    host,
   );
 }
