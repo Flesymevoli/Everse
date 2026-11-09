@@ -46,3 +46,7 @@ $env:EVERSE_DATA_DIR='D:\EverseData'
 - 非 Windows：Node 命令可以尝试，但未验收；Windows DPAPI 保存 Key 不可用，临时 Key 不降级为明文保存。
 
 旧名为 YunoTavern / Narrative Slice。改名不迁移或删除现有数据：保留 data/game.sqlite、narrative.connections.v1 浏览器键、旧世界书格式与 DPAPI 加密标识。原 YUNO_PORT/YUNO_DATA_DIR 仍兼容，新的 EVERSE_PORT/EVERSE_DATA_DIR 优先。
+
+### API 网络与代理
+
+后端会读取启动时已有的 `HTTP_PROXY` / `HTTPS_PROXY`（包括小写名称）和 `NO_PROXY`；不修改系统环境，也不自动创建代理。localhost、127.0.0.1 和 ::1 的本地 API 直连。更改外部代理配置后重新启动应用。浏览器能够联网不代表 Node 后端自动具备相同的代理配置。连接超时、域名解析失败和拒绝连接会分别提示，不显示供应商返回的敏感原文、不自动收费重试。

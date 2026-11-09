@@ -18,6 +18,17 @@ export function generationError(error: unknown, cancelled = false): string {
   if (error instanceof ModelRequestError) return error.message + "本轮未保存。";
   if (error instanceof Error && error.name === "TimeoutError")
     return "模型请求超过 90 秒等待时间，本轮未保存。请检查供应商响应速度，或改用响应更快的模型。未自动重试。";
+  const cause = error instanceof Error ? error.cause : undefined;
+  const code =
+    cause && typeof cause === "object" && "code" in cause
+      ? cause.code
+      : undefined;
+  if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "ETIMEDOUT")
+    return "无法在等待时间内连接模型 API，本轮未保存。请检查网络与代理；浏览器能打开供应商页面不代表本地后端已连通。未自动重试。";
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN")
+    return "模型 API 域名解析失败，本轮未保存。请检查 API 地址、DNS 与代理连接。未自动重试。";
+  if (code === "ECONNREFUSED")
+    return "模型 API 或代理拒绝连接，本轮未保存。请确认对应服务正在运行、端口正确。未自动重试。";
   return "模型连接或响应流未完成，本轮未保存。请检查 API 地址、网络和供应商状态；未切换到模拟模型，也未自动重试。";
 }
 export async function* generate(

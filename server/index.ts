@@ -1,3 +1,4 @@
+import { configureNetwork } from "./network.js";
 import { mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -5,6 +6,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Store } from "./store.js";
 import { createApp } from "./app.js";
+configureNetwork();
 const root = fileURLToPath(new URL("../", import.meta.url));
 process.chdir(root);
 const production = process.argv.includes("--production");
