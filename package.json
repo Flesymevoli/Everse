@@ -1,5 +1,5 @@
 {
-  "name": "yunotavern",
+  "name": "everse",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,9 @@
     "node": ">=24.20.0"
   },
   "scripts": {
+    "start": "tsx server/index.ts --production",
+    "setup": "node scripts/launcher.mjs --setup-only",
+    "test:install": "node scripts/smoke.mjs",
     "dev": "concurrently -k \"tsx watch server/index.ts\" \"vite --host 127.0.0.1\" ",
     "check": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
@@ -14,7 +17,7 @@
     "format": "prettier --write server src tests vite.config.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.0",
+    "@hono/node-server": "^2.1.6",
     "hono": "^4.9.0",
     "mammoth": "^1.13.0",
     "react": "^19.2.0",
