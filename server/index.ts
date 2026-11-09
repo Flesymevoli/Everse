@@ -26,6 +26,7 @@ const app = createApp(store, undefined, production ? port : 5173);
 if (production) {
   app.get("/", serveStatic({ path: "dist/index.html" }));
   app.get("/assets/*", serveStatic({ root: "dist" }));
+  app.get("/figma/*", serveStatic({ root: "dist" }));
 }
 const server = serve({
   fetch: app.fetch,

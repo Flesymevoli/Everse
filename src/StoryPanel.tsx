@@ -38,6 +38,7 @@ export function StoryPanel({
 }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [value, setValue] = useState("");
+  const [worldNote, setWorldNote] = useState("");
   const [guide, setGuide] = useState<Director | null>(null),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
@@ -185,6 +186,49 @@ export function StoryPanel({
       ))}
       <details className="world-guide-details">
         <summary>设定与剧情引导</summary>
+        {onDirector && (
+          <form
+            className="world-note"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSaving(true);
+              setError("");
+              void onDirector({
+                ...directorSchema.parse(director ?? {}),
+                world: [director?.world, worldNote.trim()]
+                  .filter(Boolean)
+                  .join("\n\n"),
+              })
+                .then(() => setWorldNote(""))
+                .catch((e) =>
+                  setError(e instanceof Error ? e.message : "保存失败"),
+                )
+                .finally(() => setSaving(false));
+            }}
+          >
+            <label>
+              补充世界设定
+              <textarea
+                value={worldNote}
+                maxLength={10000}
+                placeholder="写下希望持续保留的设定…"
+                onChange={(e) => setWorldNote(e.target.value)}
+              />
+            </label>
+            <button
+              disabled={
+                busy ||
+                saving ||
+                !worldNote.trim() ||
+                (director?.world.length ?? 0) + worldNote.trim().length + 2 >
+                  10000
+              }
+            >
+              记为世界设定
+            </button>
+            <small>保存到当前存档，下一轮生效；不调用模型。</small>
+          </form>
+        )}
         {fields.map(
           ([key, label]) =>
             director?.[key] && (

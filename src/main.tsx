@@ -13,6 +13,7 @@ import type { Card } from "../server/cards";
 import { greetings } from "../shared/character-text";
 import type { Message } from "../server/context";
 import "./style.css";
+import "./figma-layout.css";
 import { ModelPicker } from "./ModelPicker";
 import { ReadingView } from "./ReadingView";
 import { StoryPanel } from "./StoryPanel";
@@ -247,7 +248,7 @@ function App() {
           Ever<em>se</em>
         </span>
         <span className="mode">
-          {connections.selectedId === null ? "模拟模式" : "自有 API"}
+          {connections.selectedId === null ? "未配置模型" : "自有 API"}
         </span>
         <button
           aria-expanded={storyPanel}
@@ -266,7 +267,20 @@ function App() {
         />
       )}
       <aside className="sidebar">
-        <p className="eyebrow">你的故事书架</p>
+        <div className="library-brand">
+          <span className="brand-mark">e</span>
+          <span>
+            <strong>everse</strong>
+            <small>ALPHA</small>
+          </span>
+          <button
+            aria-label="收起作品侧栏"
+            onClick={() => setSidebar(!sidebar)}
+          >
+            <img src="/figma/collapse.svg" alt="" />
+          </button>
+        </div>
+        <p className="eyebrow">YOUR LIBRARY</p>
         <button
           disabled={busy}
           onClick={() =>
@@ -279,7 +293,8 @@ function App() {
             })
           }
         >
-          ＋ 创建故事 / 导入设定
+          <img className="figma-icon" src="/figma/plus.svg" alt="" /> 新建故事 /
+          导入设定
         </button>
         <Library
           characters={works}
@@ -308,7 +323,7 @@ function App() {
         />
         <div className="sidebar-footer">
           <button onClick={() => setSettings(true)}>偏好与模型设置</button>
-          <p>Spend tokens on storytelling.</p>
+          <p>本地玩家 · 仅保存在此设备</p>
         </div>
       </aside>
       <main className={"reader" + (preparing ? "" : " reading-layout")}>
@@ -423,7 +438,7 @@ function App() {
               session={loadedSession}
               characters={works}
               worlds={worlds}
-              mock={connections.selectedId === null}
+              mock={false}
               onBusy={setBusy}
               onGuide={(draft) =>
                 api("sessions/" + session + "/guide", {
@@ -595,34 +610,6 @@ function App() {
                 <span className="toggle-dot" aria-hidden="true" />
                 行动建议 <span>{suggestions && session ? "开" : "关"}</span>
               </button>
-              <button
-                type="button"
-                className="remember-setting"
-                disabled={busy || !session || !input.trim()}
-                title="将输入原文追加到本存档世界观，从下一轮持续使用；不调用模型，也不发送行动"
-                onClick={() =>
-                  void action(async () => {
-                    const previous = loadedSession?.options.director;
-                    await api(`sessions/${session}/director`, {
-                      revision: loadedSession?.options.directorRevision ?? 0,
-                      director: {
-                        characters: previous?.characters ?? "",
-                        playerState: previous?.playerState ?? "",
-                        direction: previous?.direction ?? "",
-                        world: [previous?.world, input.trim()]
-                          .filter(Boolean)
-                          .join("\n\n"),
-                      },
-                    });
-                    await load(session);
-                    setNotice(
-                      "已将输入原文保存为本存档世界设定；可在右侧故事引导中修改或删除。没有发送行动或调用模型。",
-                    );
-                  })
-                }
-              >
-                记为世界设定
-              </button>
             </div>
             <form
               className="composer"
@@ -766,7 +753,7 @@ function App() {
           message={textEdit.message}
           restore={textEdit.restore}
           initialReplacement={textEdit.replacement}
-          mock={connections.selectedId === null}
+          mock={false}
           onClose={() => {
             setTextEdit(null);
             setEditPreview(null);
@@ -1026,8 +1013,7 @@ function App() {
                 读取本存档调用用量
               </button>
               <p className="muted">
-                包含失败调用；null
-                表示供应商未报告，不能当作零费用。模拟用量为零。
+                包含失败调用；null 表示供应商未报告，不能当作零费用。
               </p>
               {usage !== null && <pre>{JSON.stringify(usage, null, 2)}</pre>}
               <pre>

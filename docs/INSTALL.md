@@ -42,7 +42,7 @@ $env:EVERSE_DATA_DIR='D:\EverseData'
 - 官方下载或 npm 失败：查看错误，检查网络和磁盘空间后重试；不跳过哈希或换来历不明的包。
 - 解压中断：关闭安装窗口，检查 .runtime 中是否存在不完整的对应 Node 版本目录；备份后只移除该运行时目录再试，保留 data。
 - 端口占用：关闭此前启动窗口，或使用新的 EVERSE_PORT。
-- 模拟回复：这是默认的无费用验证模式。配置并选择真实连接后才会使用自己的模型。
+- 未配置模型：先在设置中保存 API 连接，再在主界面选择。应用不再提供模拟模型选项；自动化测试仍使用隔离的假 API。
 - 非 Windows：Node 命令可以尝试，但未验收；Windows DPAPI 保存 Key 不可用，临时 Key 不降级为明文保存。
 
 旧名为 YunoTavern / Narrative Slice。改名不迁移或删除现有数据：保留 data/game.sqlite、narrative.connections.v1 浏览器键、旧世界书格式与 DPAPI 加密标识。原 YUNO_PORT/YUNO_DATA_DIR 仍兼容，新的 EVERSE_PORT/EVERSE_DATA_DIR 优先。

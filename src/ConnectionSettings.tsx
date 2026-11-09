@@ -31,7 +31,7 @@ export function ConnectionSettings({
         Key 存入本机；Key 使用 Windows
         当前用户加密，不回传浏览器。刷新后可直接选择已保存连接，无需重填 Key。
       </p>
-      {!value.profiles.length && <p>还没有连接，可以先用免费模拟模型体验。</p>}
+      {!value.profiles.length && <p>添加你的 API 地址和模型后即可生成故事。</p>}
       {value.profiles.map((p, i) => (
         <details key={p.id} open className="connection-profile">
           <summary>
@@ -131,13 +131,6 @@ export function ConnectionSettings({
         }
       >
         ＋ 添加 API 连接
-      </button>
-      <button
-        type="button"
-        aria-pressed={value.selectedId === null}
-        onClick={() => onChange({ ...value, selectedId: null })}
-      >
-        使用免费模拟模型
       </button>
     </fieldset>
   );

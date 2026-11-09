@@ -18,7 +18,7 @@ export function ModelPicker({
 }: Props) {
   const popup = useRef<HTMLDetailsElement>(null);
   const selected = profiles.find((p) => p.id === selectedId);
-  const mock = selectedId === null;
+
   function close() {
     if (popup.current) popup.current.open = false;
   }
@@ -44,7 +44,7 @@ export function ModelPicker({
         }}
       >
         <span className="model-name">
-          {mock ? "模拟模型" : selected?.name || selected?.model || "选择连接"}
+          {selected?.name || selected?.model || "配置模型"}
         </span>
         <svg
           width="12"
@@ -60,20 +60,6 @@ export function ModelPicker({
       </summary>
       <div className="model-options">
         <p>本次使用的模型</p>
-        <button
-          type="button"
-          disabled={disabled}
-          aria-pressed={mock}
-          onClick={() => {
-            onSelect(null);
-            close();
-          }}
-        >
-          <span>
-            模拟模型<small>免费 · 用于体验与测试</small>
-          </span>
-          <span aria-hidden="true">{mock ? "✓" : ""}</span>
-        </button>
         {profiles.map((profile) => (
           <button
             type="button"

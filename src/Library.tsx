@@ -1,10 +1,11 @@
+import { libraryGroups, type LibrarySave } from "./library-groups";
 import { readJson, fetchLocal } from "./response";
 
 import { CreationGuide, PlayerFields } from "./CreationGuide";
 import { readPlayer } from "../shared/player";
 import { BookEntryFields, type BookDraft } from "./BookEntryFields";
 import { createPortal } from "react-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Card } from "../server/cards";
 import type { World } from "../server/worlds";
 export type WorldItem = {
@@ -14,11 +15,7 @@ export type WorldItem = {
   warnings: string[];
 };
 type Character = { id: string; card: Card; warnings: string[] };
-type Save = {
-  id: string;
-  cardId: string;
-  options?: { name?: string; archived?: boolean; worldId?: string | null };
-};
+type Save = LibrarySave;
 export function Library({
   characters,
   worlds,
@@ -88,7 +85,7 @@ export function Library({
     setError("");
     void run(() => onStart(character, world));
   }
-  function saveButtons(items: Save[]) {
+  function saveButtons(items: Save[], scope = "manage") {
     return items.map((s, i) => (
       <div key={s.id} className="save-row">
         {renaming === s.id ? (
@@ -138,10 +135,10 @@ export function Library({
               className="save-more"
               disabled={locked}
               aria-label={`存档菜单：${s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}`}
-              popoverTarget={`save-menu-${s.id}`}
+              popoverTarget={`save-menu-${scope}-${s.id}`}
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect(),
-                  menu = document.getElementById(`save-menu-${s.id}`);
+                  menu = document.getElementById(`save-menu-${scope}-${s.id}`);
                 if (menu) {
                   menu.style.left = `${Math.max(8, Math.min(r.right - 196, window.innerWidth - 204))}px`;
                   menu.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 160))}px`;
@@ -151,7 +148,7 @@ export function Library({
               <span aria-hidden="true">⋯</span>
             </button>
             <div
-              id={`save-menu-${s.id}`}
+              id={`save-menu-${scope}-${s.id}`}
               popover="auto"
               className="save-menu"
               aria-label="存档操作"
@@ -160,7 +157,9 @@ export function Library({
               <button
                 disabled={locked}
                 onClick={() => {
-                  document.getElementById(`save-menu-${s.id}`)?.hidePopover();
+                  document
+                    .getElementById(`save-menu-${scope}-${s.id}`)
+                    ?.hidePopover();
                   setRenaming(s.id);
                   setSaveName(
                     s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`,
@@ -172,7 +171,9 @@ export function Library({
               <button
                 disabled={locked}
                 onClick={() => {
-                  document.getElementById(`save-menu-${s.id}`)?.hidePopover();
+                  document
+                    .getElementById(`save-menu-${scope}-${s.id}`)
+                    ?.hidePopover();
                   onConfigure(s.id);
                 }}
               >
@@ -184,189 +185,342 @@ export function Library({
       </div>
     ));
   }
+  const groups = libraryGroups(
+    saves,
+    characters.map((c) => ({ id: c.id, name: c.card.data.name })),
+    worlds.map((w) => ({ id: w.id, name: w.world.data.name })),
+  );
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("everse.recentSaves") ?? "[]")
+        .filter((x: unknown) => typeof x === "string")
+        .slice(0, 3);
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    if (!session) return;
+    setRecentIds((previous) => {
+      const next = [session, ...previous.filter((id) => id !== session)].slice(
+        0,
+        3,
+      );
+      try {
+        localStorage.setItem("everse.recentSaves", JSON.stringify(next));
+      } catch {
+        /* Reading remains available when browser storage is full. */
+      }
+      return next;
+    });
+  }, [session]);
+  const recent = recentIds
+    .map((id) => saves.find((s) => s.id === id))
+    .filter((s): s is Save => !!s && !s.options?.archived);
   return (
     <>
-      <div className="library-tabs" aria-label="作品分类">
-        <button
-          disabled={locked}
-          aria-pressed={tab === "worlds"}
-          onClick={() => setTab("worlds")}
-        >
-          世界书
-        </button>
-        <button
-          disabled={locked}
-          aria-pressed={tab === "characters"}
-          onClick={() => setTab("characters")}
-        >
-          角色卡
-        </button>
-      </div>
-      <div className="library-tools">
-        <button
-          disabled={locked}
-          onClick={() => {
-            setPlayerName("");
-            setPlayerDescription("");
-            setBook({ entries: {} });
-            setName("");
-            setDescription("");
-            setOpening("");
-            setPersonality("");
-            setScenario("");
-            setError("");
-            setDialog("create");
-          }}
-        >
-          ＋ 新建{tab === "worlds" ? "世界书" : "角色卡"}
-        </button>
-        <label className="import">
-          导入{tab === "worlds" ? "世界书" : "角色卡"}
-          <input
-            type="file"
-            disabled={locked}
-            accept={tab === "worlds" ? ".json" : ".json,.png"}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (!file) return;
-              void run(async () => {
-                if (file.size > 2000000) throw new Error("文件上限 2 MB");
-                if (tab === "worlds")
-                  await post("worlds", {
-                    name: file.name.replace(/\.json$/i, ""),
-                    original: JSON.parse(await file.text()),
-                  });
-                else if (file.name.toLowerCase().endsWith(".png")) {
-                  const r = await fetchLocal("/api/cards", {
-                    method: "POST",
-                    headers: { "Content-Type": "image/png" },
-                    body: file,
-                  });
-                  if (!r.ok) await readJson(r);
-                } else await post("cards", JSON.parse(await file.text()));
-                await onRefresh();
-              });
-            }}
-          />
-        </label>
-      </div>
       {error && (
         <p role="alert" className="error">
           {error}
         </p>
       )}
-      <p className="muted">
-        {tab === "worlds"
-          ? "世界设定与开场。支持 Yuno 世界书 JSON、独立酒馆世界书 JSON。"
-          : "人物设定与开场。支持酒馆 V2/V3 JSON、PNG。"}
-      </p>
-      {tab === "characters"
-        ? characters.map((c) => (
-            <details className="work-group" key={c.id}>
-              <summary>{c.card.data.name}</summary>
-              <div className="work-saves">
-                {saveButtons(saves.filter((s) => s.cardId === c.id))}
-                <button disabled={locked} onClick={() => start(c.id)}>
-                  用此角色新建存档
-                </button>
+      <section className="recent-stories" aria-label="最近继续">
+        <h2>最近继续</h2>
+        {recent.length ? (
+          recent.map((s) => {
+            const group = groups.find((g) =>
+              g.saves.some((v) => v.id === s.id),
+            );
+            return (
+              <button
+                key={s.id}
+                className="recent-story"
+                disabled={locked}
+                onClick={() => onLoad(s.id)}
+              >
+                <span className="story-cover">
+                  {Array.from(group?.name || "故")[0]}
+                </span>
+                <span>
+                  <strong>{s.options?.name || "未命名存档"}</strong>
+                  <small>{group?.name}</small>
+                </span>
+              </button>
+            );
+          })
+        ) : (
+          <p className="shelf-empty">打开一个存档，随时继续阅读。</p>
+        )}
+      </section>
+      <section className="story-tree" aria-label="我的世界">
+        <h2>我的世界</h2>
+        {groups.map((g, i) => (
+          <details
+            className="story-tree-group"
+            key={g.key}
+            open={openGroups[g.key] ?? g.saves.some((s) => s.id === session)}
+            onToggle={(e) => {
+              const open = e.currentTarget.open;
+              setOpenGroups((previous) =>
+                previous[g.key] === open
+                  ? previous
+                  : { ...previous, [g.key]: open },
+              );
+            }}
+          >
+            <summary>
+              <img
+                className="figma-icon tree-chevron"
+                src="/figma/collapsed.svg"
+                alt=""
+              />
+              <span className="story-cover small">{Array.from(g.name)[0]}</span>
+              <span>{g.name}</span>
+            </summary>
+            <div className="tree-saves">
+              {saveButtons(g.saves, "tree" + i)}
+              {!g.saves.length && (
+                <small className="shelf-empty">尚无存档</small>
+              )}
+              <button
+                disabled={locked}
+                className="tree-action"
+                onClick={() => {
+                  if (g.source)
+                    void run(async () => {
+                      const created = await post("sessions", { prepare: true });
+                      await post("sessions/" + created.id + "/preparation", {
+                        source: g.source,
+                        characterMode: "none",
+                        worldMode: "none",
+                        cardId: "",
+                        worldId: "",
+                        character: { name: "", description: "" },
+                        world: { name: "", description: "" },
+                        player: { name: "", description: "" },
+                        opening: "",
+                        presetId: null,
+                        worldbookId: null,
+                      });
+                      await onRefresh();
+                      await onCreated(created.id);
+                    });
+                  else start(g.cardId, g.worldId);
+                }}
+              >
+                <img className="figma-icon" src="/figma/plus.svg" alt="" />
+                新建存档
+              </button>
+              {g.saves.length > 0 && (
                 <button
+                  className="tree-action"
                   disabled={locked}
-                  onClick={() => {
-                    const player = readPlayer(c.card.data);
-                    setPlayerName(player?.name ?? "");
-                    setPlayerDescription(player?.description ?? "");
-                    setEditingId(c.id);
-                    setName(c.card.data.name);
-                    setDescription(c.card.data.description);
-                    setOpening(c.card.data.first_mes);
-                    setPersonality(c.card.data.personality);
-                    setScenario(c.card.data.scenario);
-                    setError("");
-                    setDialog("edit");
-                  }}
+                  onClick={() =>
+                    onConfigure(
+                      g.saves.find((s) => s.id === session)?.id ??
+                        g.saves[0].id,
+                    )
+                  }
                 >
-                  编辑角色卡
+                  <img
+                    className="figma-icon"
+                    src="/figma/world-settings.svg"
+                    alt=""
+                  />
+                  设定与角色
                 </button>
-                {c.warnings.length > 0 && (
-                  <details>
-                    <summary>兼容提示</summary>
-                    <ul>
-                      {c.warnings.map((w, i) => (
-                        <li key={i}>{w}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </div>
-            </details>
-          ))
-        : worlds.map((w) => (
-            <details className="work-group" key={w.id}>
-              <summary>{w.world.data.name}</summary>
-              <div className="work-saves">
-                <p>{w.world.data.description || "未填写世界设定"}</p>
-                {saveButtons(saves.filter((s) => s.options?.worldId === w.id))}
-                <button disabled={locked} onClick={() => start("", w.id)}>
-                  在此世界新建存档
-                </button>
-                <button
-                  disabled={locked}
-                  onClick={() => {
-                    const player = readPlayer(w.world.data);
-                    setPlayerName(player?.name ?? "");
-                    setPlayerDescription(player?.description ?? "");
-                    setEditingId(w.id);
-                    setName(w.world.data.name);
-                    setDescription(w.world.data.description);
-                    setOpening(w.world.data.first_mes);
-                    const raw = w.original as
-                      Record<string, unknown> | undefined;
-                    const originalBook =
-                      raw && "entries" in raw
-                        ? raw
-                        : (raw?.data as Record<string, unknown> | undefined)
-                            ?.worldbook;
-                    setBook(
-                      structuredClone(
-                        (originalBook ??
-                          w.world.data.worldbook ?? {
-                            entries: {},
-                          }) as BookDraft,
-                      ),
-                    );
-                    setError("");
-                    setDialog("edit");
-                  }}
-                >
-                  编辑世界书
-                </button>
-                <a href={"/api/worlds/" + w.id + "/export"}>导出 JSON</a>
-                {w.warnings.length > 0 && (
-                  <details>
-                    <summary>兼容提示</summary>
-                    <ul>
-                      {w.warnings.map((v, i) => (
-                        <li key={i}>{v}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </div>
-            </details>
-          ))}
-      {(tab === "worlds" ? worlds : characters).length === 0 && (
-        <p className="muted">还没有作品，写几个字也可以开始。</p>
-      )}
-      <button disabled={locked} onClick={() => start()}>
-        ＋ 新建存档
-      </button>
-      {saves.some((s) => !s.cardId && !s.options?.worldId) && (
-        <section aria-label="独立故事存档">
-          <h3>我的故事</h3>
-          {saveButtons(saves.filter((s) => !s.cardId && !s.options?.worldId))}
-        </section>
-      )}
+              )}
+            </div>
+          </details>
+        ))}
+      </section>
+      <details className="library-manager">
+        <summary>管理角色卡与世界书</summary>
+        <div className="library-tabs" aria-label="作品分类">
+          <button
+            disabled={locked}
+            aria-pressed={tab === "worlds"}
+            onClick={() => setTab("worlds")}
+          >
+            世界书
+          </button>
+          <button
+            disabled={locked}
+            aria-pressed={tab === "characters"}
+            onClick={() => setTab("characters")}
+          >
+            角色卡
+          </button>
+        </div>
+        <div className="library-tools">
+          <button
+            disabled={locked}
+            onClick={() => {
+              setPlayerName("");
+              setPlayerDescription("");
+              setBook({ entries: {} });
+              setName("");
+              setDescription("");
+              setOpening("");
+              setPersonality("");
+              setScenario("");
+              setError("");
+              setDialog("create");
+            }}
+          >
+            ＋ 新建{tab === "worlds" ? "世界书" : "角色卡"}
+          </button>
+          <label className="import">
+            导入{tab === "worlds" ? "世界书" : "角色卡"}
+            <input
+              type="file"
+              disabled={locked}
+              accept={tab === "worlds" ? ".json" : ".json,.png"}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                void run(async () => {
+                  if (file.size > 2000000) throw new Error("文件上限 2 MB");
+                  if (tab === "worlds")
+                    await post("worlds", {
+                      name: file.name.replace(/\.json$/i, ""),
+                      original: JSON.parse(await file.text()),
+                    });
+                  else if (file.name.toLowerCase().endsWith(".png")) {
+                    const r = await fetchLocal("/api/cards", {
+                      method: "POST",
+                      headers: { "Content-Type": "image/png" },
+                      body: file,
+                    });
+                    if (!r.ok) await readJson(r);
+                  } else await post("cards", JSON.parse(await file.text()));
+                  await onRefresh();
+                });
+              }}
+            />
+          </label>
+        </div>
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
+        <p className="muted">
+          {tab === "worlds"
+            ? "世界设定与开场。支持 Yuno 世界书 JSON、独立酒馆世界书 JSON。"
+            : "人物设定与开场。支持酒馆 V2/V3 JSON、PNG。"}
+        </p>
+        {tab === "characters"
+          ? characters.map((c) => (
+              <details className="work-group" key={c.id}>
+                <summary>{c.card.data.name}</summary>
+                <div className="work-saves">
+                  {saveButtons(saves.filter((s) => s.cardId === c.id))}
+                  <button disabled={locked} onClick={() => start(c.id)}>
+                    用此角色新建存档
+                  </button>
+                  <button
+                    disabled={locked}
+                    onClick={() => {
+                      const player = readPlayer(c.card.data);
+                      setPlayerName(player?.name ?? "");
+                      setPlayerDescription(player?.description ?? "");
+                      setEditingId(c.id);
+                      setName(c.card.data.name);
+                      setDescription(c.card.data.description);
+                      setOpening(c.card.data.first_mes);
+                      setPersonality(c.card.data.personality);
+                      setScenario(c.card.data.scenario);
+                      setError("");
+                      setDialog("edit");
+                    }}
+                  >
+                    编辑角色卡
+                  </button>
+                  {c.warnings.length > 0 && (
+                    <details>
+                      <summary>兼容提示</summary>
+                      <ul>
+                        {c.warnings.map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              </details>
+            ))
+          : worlds.map((w) => (
+              <details className="work-group" key={w.id}>
+                <summary>{w.world.data.name}</summary>
+                <div className="work-saves">
+                  <p>{w.world.data.description || "未填写世界设定"}</p>
+                  {saveButtons(
+                    saves.filter((s) => s.options?.worldId === w.id),
+                  )}
+                  <button disabled={locked} onClick={() => start("", w.id)}>
+                    在此世界新建存档
+                  </button>
+                  <button
+                    disabled={locked}
+                    onClick={() => {
+                      const player = readPlayer(w.world.data);
+                      setPlayerName(player?.name ?? "");
+                      setPlayerDescription(player?.description ?? "");
+                      setEditingId(w.id);
+                      setName(w.world.data.name);
+                      setDescription(w.world.data.description);
+                      setOpening(w.world.data.first_mes);
+                      const raw = w.original as
+                        Record<string, unknown> | undefined;
+                      const originalBook =
+                        raw && "entries" in raw
+                          ? raw
+                          : (raw?.data as Record<string, unknown> | undefined)
+                              ?.worldbook;
+                      setBook(
+                        structuredClone(
+                          (originalBook ??
+                            w.world.data.worldbook ?? {
+                              entries: {},
+                            }) as BookDraft,
+                        ),
+                      );
+                      setError("");
+                      setDialog("edit");
+                    }}
+                  >
+                    编辑世界书
+                  </button>
+                  <a href={"/api/worlds/" + w.id + "/export"}>导出 JSON</a>
+                  {w.warnings.length > 0 && (
+                    <details>
+                      <summary>兼容提示</summary>
+                      <ul>
+                        {w.warnings.map((v, i) => (
+                          <li key={i}>{v}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              </details>
+            ))}
+        {(tab === "worlds" ? worlds : characters).length === 0 && (
+          <p className="muted">还没有作品，写几个字也可以开始。</p>
+        )}
+        <button disabled={locked} onClick={() => start()}>
+          ＋ 新建存档
+        </button>
+        {saves.some((s) => !s.cardId && !s.options?.worldId) && (
+          <section aria-label="独立故事存档">
+            <h3>我的故事</h3>
+            {saveButtons(saves.filter((s) => !s.cardId && !s.options?.worldId))}
+          </section>
+        )}
+      </details>
       {dialog &&
         createPortal(
           <div className="settings-backdrop">

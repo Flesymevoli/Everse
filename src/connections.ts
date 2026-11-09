@@ -83,12 +83,7 @@ export function removeConnection(state: Connections, id: string): Connections {
 }
 export function resolveConnection(state: Connections): Config {
   if (state.selectedId === null)
-    return {
-      mock: true,
-      baseUrl: "http://127.0.0.1",
-      model: "mock",
-      apiKey: "",
-    };
+    throw new Error("请先在设置中添加并选择 API 连接，再生成故事。");
   const p = state.profiles.find((p) => p.id === state.selectedId);
   if (!p) throw new Error("所选 API 连接不存在，请重新选择");
   if (p.saved && p.dirty) throw new Error("连接已修改，请先保存再使用");

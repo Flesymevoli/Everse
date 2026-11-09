@@ -1,0 +1,314 @@
+/* Everse application theme. Source: Figma Reader 2:2; see docs/STYLE-GUIDE.md. */
+:root {
+  --paper: #fbfaf6;
+  --sidebar: #f3f0e9;
+  --ink: #2e2a26;
+  --muted: #86796e;
+  --accent: #a5634c;
+  --line: #e8e3da;
+  --selection: #eae1d6;
+  --panel: #f6f3ed;
+}
+html {
+  scrollbar-color: #c9bbae transparent;
+  scrollbar-width: thin;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c9bbae transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c9bbae;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+.figma-icon {
+  flex: none;
+  vertical-align: middle;
+}
+.sidebar {
+  top: 0;
+  width: 246px;
+  padding: 24px 18px 16px;
+  z-index: 5;
+  gap: 0;
+}
+.library-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border-radius: 11px;
+  background: #bd745d;
+  color: white;
+  font:
+    bold 27px Georgia,
+    serif;
+}
+.library-brand strong {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+}
+.library-brand small {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  color: var(--muted);
+}
+.library-brand button {
+  margin-left: auto;
+  padding: 6px;
+  min-height: 36px;
+}
+.sidebar > .eyebrow {
+  font-size: 10px;
+  margin: 0 0 12px;
+}
+.sidebar > button {
+  background: #e5dbcf;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  font-size: 13px;
+  min-height: 42px;
+  flex-shrink: 0;
+}
+.sidebar h2 {
+  margin: 24px 0 10px;
+  font-size: 12px;
+}
+.topbar {
+  margin-left: 246px;
+  height: 70px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.topbar .brand {
+  font-size: 18px;
+}
+.app.sidebar-open .topbar {
+  margin-left: 0;
+}
+.reader {
+  margin-left: 246px;
+  padding-inline: clamp(16px, 3vw, 48px);
+}
+.reader.reading-layout {
+  height: calc(100dvh - 70px);
+}
+.reading-layout > .reading-scroll {
+  overflow-x: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  padding-inline: 8px;
+}
+.reading-scroll > *,
+.reader > .composer-wrap {
+  max-width: 650px;
+  min-width: 0;
+}
+.reading-scroll {
+  overflow-wrap: anywhere;
+}
+.prose {
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 18px;
+  line-height: 1.95;
+}
+.reading-scroll pre,
+.reading-scroll img,
+.reading-scroll table {
+  max-width: 100%;
+}
+.recent-story {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  background: #e8ded2;
+  border-radius: 11px;
+  padding: 10px;
+  margin: 6px 0;
+}
+.recent-story > span:last-child {
+  min-width: 0;
+}
+.recent-story strong,
+.recent-story small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-story strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.recent-story small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.story-cover {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 42px;
+  flex: none;
+  background: #d9c9b8;
+  border-radius: 6px;
+  color: #6b5545;
+  font-family: Georgia, SimSun, serif;
+}
+.story-cover.small {
+  width: 27px;
+  height: 28px;
+  font-size: 13px;
+}
+.story-tree-group {
+  border: 0;
+  padding: 0;
+  margin: 4px 0;
+}
+.story-tree-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 43px;
+  padding: 5px 3px;
+  list-style: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+.story-tree-group > summary::-webkit-details-marker {
+  display: none;
+}
+.story-tree-group > summary > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.story-tree-group[open] > summary .tree-chevron {
+  transform: rotate(90deg);
+}
+.tree-saves {
+  margin-left: 14px;
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+.tree-saves .shelf-item {
+  font-size: 12px;
+  min-height: 37px;
+  padding: 6px 8px;
+}
+.tree-saves .shelf-item[aria-pressed="true"] {
+  background: var(--selection);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.tree-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  padding-inline: 8px;
+  width: 100%;
+  text-align: left;
+}
+.shelf-empty {
+  font-size: 11px;
+  color: var(--muted);
+}
+.library-manager {
+  margin-top: 24px;
+  font-size: 12px;
+}
+.library-manager > summary {
+  padding: 10px 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sidebar-footer {
+  padding-top: 24px;
+}
+.sidebar-footer button {
+  font-size: 12px;
+  text-align: left;
+  padding-left: 0;
+}
+.sidebar-footer p {
+  font:
+    10px/1.6 "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.story-panel {
+  background: var(--panel);
+}
+.world-note label {
+  display: block;
+  font-size: 13px;
+}
+.world-note textarea {
+  display: block;
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.world-note small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .topbar,
+  .app.sidebar-open .topbar {
+    margin-left: 0;
+    height: 60px;
+  }
+  .sidebar {
+    top: 60px;
+    width: min(286px, 88vw);
+  }
+  .library-brand {
+    margin-bottom: 20px;
+  }
+  .reader,
+  .app.sidebar-open .reader {
+    margin-left: 0;
+    padding-inline: 14px;
+  }
+  .reader.reading-layout {
+    height: calc(100dvh - 60px);
+  }
+  .reading-layout > .reading-scroll {
+    padding-inline: 2px;
+  }
+  .prose {
+    font-size: 17px;
+  }
+  .tree-action,
+  .tree-saves .shelf-item {
+    min-height: 44px;
+  }
+}
