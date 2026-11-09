@@ -268,11 +268,7 @@ function App() {
       )}
       <aside className="sidebar">
         <div className="library-brand">
-          <span className="brand-mark">e</span>
-          <span>
-            <strong>everse</strong>
-            <small>ALPHA</small>
-          </span>
+          <span className="brand">Ever<em>se</em></span>
           <button
             aria-label="收起作品侧栏"
             onClick={() => setSidebar(!sidebar)}

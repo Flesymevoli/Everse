@@ -49,27 +49,6 @@ html {
   gap: 10px;
   margin-bottom: 28px;
 }
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 33px;
-  height: 33px;
-  border-radius: 11px;
-  background: #bd745d;
-  color: white;
-  font:
-    bold 27px var(--font-app);
-}
-.library-brand strong {
-  font-size: 22px;
-  letter-spacing: -0.5px;
-}
-.library-brand small {
-  display: block;
-  font-size: 9px;
-  letter-spacing: 1.6px;
-  color: var(--muted);
-}
 .library-brand button {
   margin-left: auto;
   padding: 6px;
