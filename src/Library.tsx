@@ -77,6 +77,8 @@ export function Library({
     }
   }
   const locked = busy || working;
+  const [renaming, setRenaming] = useState<string | null>(null),
+    [saveName, setSaveName] = useState("");
   function start(character = "", world = "") {
     setCardId(character);
     setWorldId(world);
@@ -85,16 +87,64 @@ export function Library({
   }
   function saveButtons(items: Save[]) {
     return items.map((s, i) => (
-      <button
-        key={s.id}
-        className="shelf-item"
-        disabled={locked}
-        aria-pressed={session === s.id}
-        onClick={() => onLoad(s.id)}
-      >
-        {s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}
-        {s.options?.archived ? " · 已归档" : ""}
-      </button>
+      <div key={s.id} className="save-row">
+        {renaming === s.id ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(async () => {
+                await post(`sessions/${s.id}/options`, {
+                  name: saveName.trim(),
+                });
+                await onRefresh();
+                setRenaming(null);
+              });
+            }}
+          >
+            <label>
+              存档名称
+              <input
+                aria-label="存档新名称"
+                maxLength={100}
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <button disabled={locked || !saveName.trim()}>保存名称</button>
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => setRenaming(null)}
+            >
+              取消
+            </button>
+          </form>
+        ) : (
+          <>
+            <button
+              className="shelf-item"
+              disabled={locked}
+              aria-pressed={session === s.id}
+              onClick={() => onLoad(s.id)}
+            >
+              {s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}
+              {s.options?.archived ? " · 已归档" : ""}
+            </button>
+            <button
+              className="save-rename"
+              disabled={locked}
+              aria-label={`重命名 ${s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}`}
+              onClick={() => {
+                setRenaming(s.id);
+                setSaveName(s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`);
+              }}
+            >
+              改名
+            </button>
+          </>
+        )}
+      </div>
     ));
   }
   return (

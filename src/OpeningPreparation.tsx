@@ -7,6 +7,7 @@ import { preparationSchema, type Preparation } from "../shared/preparation";
 import { readPlayer } from "../shared/player";
 import { expand } from "../shared/character-text";
 import { DocumentPlanEditor } from "./DocumentPlanEditor";
+import type { OpeningGuide } from "../shared/opening-guide";
 export type PreparingSession = {
   story?: import("../shared/story").StoryView;
   draft?: { raw: string; input: string; error: string } | null;
@@ -40,6 +41,7 @@ export function OpeningPreparation({
   onStarted,
   onBusy,
   onClassify,
+  onGuide,
 }: {
   session: PreparingSession;
   characters: { id: string; card: Card }[];
@@ -50,6 +52,7 @@ export function OpeningPreparation({
   onStarted: () => Promise<void>;
   onBusy: (value: boolean) => void;
   onClassify: (documentId: string, revision: number) => Promise<unknown>;
+  onGuide: (draft: Preparation) => Promise<{ guide: OpeningGuide }>;
 }) {
   const [draft, setDraft] = useState<Preparation>(() => {
     if (session.options.openingDraft) return session.options.openingDraft;
@@ -445,6 +448,73 @@ export function OpeningPreparation({
           </details>
           <details>
             <summary>我在故事中是谁？（可选）</summary>
+            <p>
+              有作者创建流程时，可以读取设定中的问题与选项；不必填写统一角色表。
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                void run(async () => {
+                  const result = await onGuide({ ...draft, guide: undefined });
+                  setDraft({ ...draft, guide: result.guide });
+                  setNotice(
+                    result.guide.questions.length
+                      ? "请按设定选择或自由回答；答案会随准备保存，参与开场和后续剧情。"
+                      : "资料没有明确的角色创建要求，可跳过身份直接开局。",
+                  );
+                })
+              }
+            >
+              按作品设定生成角色引导
+            </button>
+            <small>
+              {mock ? "使用模拟模型" : "调用当前 API 一次，可能产生费用"}
+              ；不自动重试，不替你决定身份。
+            </small>
+            {draft.guide?.questions.map((question, index) => (
+              <div className="opening-question" key={index}>
+                <label>
+                  {index + 1}. {question.question}
+                  <textarea
+                    aria-label={question.question}
+                    maxLength={2000}
+                    value={draft.guide?.answers[index] ?? ""}
+                    onChange={(e) => {
+                      const guide = draft.guide!;
+                      const answers = [...guide.answers];
+                      answers[index] = e.target.value;
+                      setDraft({ ...draft, guide: { ...guide, answers } });
+                    }}
+                  />
+                </label>
+                {question.choices.map((choice, i) => (
+                  <button
+                    type="button"
+                    key={i}
+                    onClick={() => {
+                      const guide = draft.guide!;
+                      const answers = [...guide.answers];
+                      answers[index] = choice;
+                      setDraft({ ...draft, guide: { ...guide, answers } });
+                    }}
+                  >
+                    {i + 1}. {choice}
+                  </button>
+                ))}
+                <details>
+                  <summary>作者依据</summary>
+                  <p>{question.evidence}</p>
+                </details>
+              </div>
+            ))}
+            {draft.guide && (
+              <button
+                type="button"
+                onClick={() => setDraft({ ...draft, guide: undefined })}
+              >
+                移除引导（保留其他设定）
+              </button>
+            )}
             <label>
               玩家称呼（可选）
               <input

@@ -28,6 +28,24 @@ export async function* generate(
   onUsage?: (usage: Usage) => void,
 ): AsyncGenerator<string> {
   if (config.mock) {
+    if (messages[0]?.content.startsWith("YUNO_OPENING_GUIDE")) {
+      const evidence = messages[1].content
+        .split(/\n/)
+        .find((line) => /选择|身份/.test(line));
+      yield JSON.stringify({
+        questions: evidence
+          ? [
+              {
+                question: "你希望如何回答这项开局要求？",
+                choices: [],
+                evidence: evidence.slice(0, 1000),
+              },
+            ]
+          : [],
+      });
+      onUsage?.({ input: 0, output: 0, cached: 0 });
+      return;
+    }
     if (messages[0]?.content.startsWith("YUNO_IMPORT_CLASSIFICATION")) {
       const input = JSON.parse(messages[1].content) as {
         targets: { index: number; text: string }[];

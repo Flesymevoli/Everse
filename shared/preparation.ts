@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { playerSchema } from "./player.js";
+import { openingGuideSchema } from "./opening-guide.js";
 const simple = z.object({
   name: z.string().trim().max(100).default(""),
   description: z.string().max(100000).default(""),
 });
 export const preparationSchema = z
   .object({
+    guide: openingGuideSchema.optional(),
     source: z
       .object({
         name: z.string().max(100),

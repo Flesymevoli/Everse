@@ -9,6 +9,9 @@ export class Store {
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     this.db.exec(
+      "CREATE TABLE IF NOT EXISTS director_revisions(id INTEGER PRIMARY KEY,sessionId TEXT NOT NULL,body TEXT NOT NULL)",
+    );
+    this.db.exec(
       "CREATE TABLE IF NOT EXISTS document_plans(id TEXT PRIMARY KEY, body TEXT NOT NULL)",
     );
     this.db.exec(

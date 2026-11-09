@@ -4,7 +4,7 @@ import {
 } from "./OpeningPreparation";
 import { readPlayer } from "../shared/player";
 import { Library, type WorldItem } from "./Library";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import type { Card } from "../server/cards";
 import { greetings } from "../shared/character-text";
@@ -73,6 +73,15 @@ function App() {
     [error, setError] = useState(""),
     [prompt, setPrompt] = useState<unknown>(null);
   const [usage, setUsage] = useState<unknown>(null);
+  const readingScroll = useRef<HTMLDivElement>(null),
+    followStory = useRef(true);
+  useLayoutEffect(() => {
+    if (!preparing && followStory.current && readingScroll.current)
+      readingScroll.current.scrollTop = readingScroll.current.scrollHeight;
+  }, [draft, messages, preparing]);
+  useEffect(() => {
+    followStory.current = true;
+  }, [session]);
   const [connections, setConnections] = useState(() => {
     try {
       return restoreConnections(localStorage.getItem(connectionStorageKey));
@@ -284,298 +293,323 @@ function App() {
           <p>Spend tokens on storytelling.</p>
         </div>
       </aside>
-      <main className="reader">
-        <div className="book-heading">
-          <p className="eyebrow">一部由你参与的小说</p>
-          <h1>
-            {[
-              loadedSession?.options.storySource?.name,
-              activeWorld?.world.data.name,
-              work?.card.data.name,
-            ]
-              .filter(Boolean)
-              .join(" · ") || "故事，等你翻开。"}
-          </h1>
-          <p className="subtitle">
-            {session ? "慢慢读，随心继续。" : "选择作品，或导入你喜欢的角色。"}
-          </p>
-          {work &&
-            !preparing &&
-            !loadedSession?.options.openingState &&
-            !activeWorldId &&
-            session &&
-            !busy &&
-            messages.length <= 1 &&
-            !messages.some((message) => message.role !== "assistant") &&
-            greetings(work.card, activePlayer?.name).length > 1 && (
-              <label className="greeting-choice">
-                开场白
-                <select
-                  aria-label="选择开场白"
-                  value={Math.max(
-                    0,
-                    greetings(work.card, activePlayer?.name).indexOf(
-                      messages[0]?.content ?? "",
-                    ),
-                  )}
-                  onChange={(event) => {
-                    const index = Number(event.target.value);
-                    void action(async () => {
-                      const updated = await api<{ messages: Message[] }>(
-                        "sessions/" + session + "/greeting",
-                        { index },
-                      );
-                      setMessages(updated.messages);
-                      setPrompt(null);
-                    });
-                  }}
-                >
-                  {greetings(work.card, activePlayer?.name).map(
-                    (text, index) => (
-                      <option key={index} value={index}>
-                        {index === 0 ? "默认开场" : `备选 ${index}`} ·{" "}
-                        {text.slice(0, 45) || "空开场"}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-            )}
-        </div>
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-        {loadedSession?.draft?.raw && !busy && (
-          <details className="recovered-draft">
-            <summary>上次生成的未提交草稿</summary>
-            <p>{loadedSession.draft.error || "开场预览草稿"}</p>
-            <p className="muted">
-              这段文字尚未成为剧情，不影响已有存档。可复制留存，再重试原行动。
+      <main className={"reader" + (preparing ? "" : " reading-layout")}>
+        <div
+          className="reading-scroll"
+          ref={readingScroll}
+          onScroll={(e) => {
+            const node = e.currentTarget;
+            followStory.current =
+              node.scrollHeight - node.clientHeight - node.scrollTop < 80;
+          }}
+        >
+          <div className="book-heading">
+            <p className="eyebrow">一部由你参与的小说</p>
+            <h1>
+              {[
+                loadedSession?.options.storySource?.name,
+                activeWorld?.world.data.name,
+                work?.card.data.name,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "故事，等你翻开。"}
+            </h1>
+            <p className="subtitle">
+              {session
+                ? "慢慢读，随心继续。"
+                : "选择作品，或导入你喜欢的角色。"}
             </p>
-            <pre>{visibleStory(loadedSession.draft.raw)}</pre>
-            <button
-              onClick={() =>
-                void navigator.clipboard
-                  .writeText(visibleStory(loadedSession.draft!.raw))
-                  .catch(() => setError("复制失败"))
-              }
-            >
-              复制草稿
-            </button>
-            {!preparing && (
-              <button onClick={() => setInput(loadedSession.draft!.input)}>
-                恢复原行动到输入框
-              </button>
-            )}
-          </details>
-        )}
-        {preparing && loadedSession ? (
-          <OpeningPreparation
-            key={session}
-            session={loadedSession}
-            characters={works}
-            worlds={worlds}
-            mock={connections.selectedId === null}
-            onBusy={setBusy}
-            onClassify={(documentId, revision) =>
-              api(`documents/${documentId}/classify`, {
-                revision,
-                config: resolveConnection(connections),
-                connectionId: connections.profiles.find(
-                  (p) => p.id === connections.selectedId,
-                )?.saved
-                  ? connections.selectedId
-                  : undefined,
-              })
-            }
-            onStarted={async () => {
-              await refresh();
-              await load(session);
-            }}
-            modelControl={
-              <ModelPicker
-                profiles={connections.profiles}
-                selectedId={connections.selectedId}
-                disabled={busy}
-                onSelect={(selectedId) =>
-                  setConnections({ ...connections, selectedId })
+            {work &&
+              !preparing &&
+              !loadedSession?.options.openingState &&
+              !activeWorldId &&
+              session &&
+              !busy &&
+              messages.length <= 1 &&
+              !messages.some((message) => message.role !== "assistant") &&
+              greetings(work.card, activePlayer?.name).length > 1 && (
+                <label className="greeting-choice">
+                  开场白
+                  <select
+                    aria-label="选择开场白"
+                    value={Math.max(
+                      0,
+                      greetings(work.card, activePlayer?.name).indexOf(
+                        messages[0]?.content ?? "",
+                      ),
+                    )}
+                    onChange={(event) => {
+                      const index = Number(event.target.value);
+                      void action(async () => {
+                        const updated = await api<{ messages: Message[] }>(
+                          "sessions/" + session + "/greeting",
+                          { index },
+                        );
+                        setMessages(updated.messages);
+                        setPrompt(null);
+                      });
+                    }}
+                  >
+                    {greetings(work.card, activePlayer?.name).map(
+                      (text, index) => (
+                        <option key={index} value={index}>
+                          {index === 0 ? "默认开场" : `备选 ${index}`} ·{" "}
+                          {text.slice(0, 45) || "空开场"}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+              )}
+          </div>
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          {loadedSession?.draft?.raw && !busy && (
+            <details className="recovered-draft">
+              <summary>上次生成的未提交草稿</summary>
+              <p>{loadedSession.draft.error || "开场预览草稿"}</p>
+              <p className="muted">
+                这段文字尚未成为剧情，不影响已有存档。可复制留存，再重试原行动。
+              </p>
+              <pre>{visibleStory(loadedSession.draft.raw)}</pre>
+              <button
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(visibleStory(loadedSession.draft!.raw))
+                    .catch(() => setError("复制失败"))
                 }
-                onSettings={() => setSettings(true)}
-              />
-            }
-            onGenerate={async (draft) => {
-              const config = resolveConnection(connections);
-              const result = await api<{ opening: string; prompt: unknown }>(
-                "sessions/" + session + "/opening",
-                {
+              >
+                复制草稿
+              </button>
+              {!preparing && (
+                <button onClick={() => setInput(loadedSession.draft!.input)}>
+                  恢复原行动到输入框
+                </button>
+              )}
+            </details>
+          )}
+          {preparing && loadedSession ? (
+            <OpeningPreparation
+              key={session}
+              session={loadedSession}
+              characters={works}
+              worlds={worlds}
+              mock={connections.selectedId === null}
+              onBusy={setBusy}
+              onGuide={(draft) =>
+                api("sessions/" + session + "/guide", {
                   draft,
-                  config,
-                  ...(!automaticBudget ? { budget, reserve } : {}),
+                  config: resolveConnection(connections),
                   connectionId: connections.profiles.find(
                     (p) => p.id === connections.selectedId,
                   )?.saved
                     ? connections.selectedId
                     : undefined,
-                },
-              ).catch(async (error) => {
-                const latest = await api<PreparingSession>(
-                  "sessions/" + session,
-                ).catch(() => null);
-                if (latest) setLoadedSession(latest);
-                throw error;
-              });
-              setPrompt(result.prompt);
-              return result;
-            }}
-          />
-        ) : (
-          <>
-            <ReadingView
-              busy={busy}
-              onRegenerate={() => void send("regenerate")}
-              onSwipe={(messageIndex, index) =>
-                void action(async () => {
-                  await api<{ messages: Message[] }>(
-                    "sessions/" + session + "/swipe",
-                    { messageIndex, index },
-                  );
-                  await load(session);
                 })
               }
-              messages={messages}
-              draft={draft}
-              generating={generating}
-              suggestionsEnabled={suggestions && !!session}
-              onChoose={(text) => {
-                setInput(text);
-                document.getElementById("action-input")?.focus();
-              }}
-              onCopy={(text) =>
-                void navigator.clipboard
-                  .writeText(text)
-                  .catch(() => setError("复制失败，请选择正文手动复制"))
+              onClassify={(documentId, revision) =>
+                api(`documents/${documentId}/classify`, {
+                  revision,
+                  config: resolveConnection(connections),
+                  connectionId: connections.profiles.find(
+                    (p) => p.id === connections.selectedId,
+                  )?.saved
+                    ? connections.selectedId
+                    : undefined,
+                })
               }
-            />
-            {!messages.length && !draft && (
-              <div className="empty-reading">
-                <span>一</span>
-                <p>
-                  {work
-                    ? "一段设定，一句开场。\n故事的方向，由你决定。"
-                    : "你不必预先知道结局。\n从一个角色、一个念头开始。"}
-                </p>
-              </div>
-            )}
-            <div className="composer-wrap">
-              <div className="composer-preferences">
-                <button
-                  type="button"
-                  className="suggestion-toggle"
-                  role="switch"
-                  aria-checked={suggestions && !!session}
-                  aria-label="生成行动建议"
-                  disabled={busy || !session}
-                  title={
-                    session
-                      ? "按当前存档保存；建议只提供灵感，可自由输入"
-                      : "进入存档后可开启"
+              onStarted={async () => {
+                await refresh();
+                await load(session);
+              }}
+              modelControl={
+                <ModelPicker
+                  profiles={connections.profiles}
+                  selectedId={connections.selectedId}
+                  disabled={busy}
+                  onSelect={(selectedId) =>
+                    setConnections({ ...connections, selectedId })
                   }
-                  onClick={() =>
-                    void action(async () => {
-                      const enabled = !suggestions;
-                      await api("sessions/" + session + "/preferences", {
-                        suggestions: enabled,
-                      });
-                      setSuggestions(enabled);
-                    })
-                  }
-                >
-                  <span className="toggle-dot" aria-hidden="true" />
-                  行动建议 <span>{suggestions && session ? "开" : "关"}</span>
-                </button>
-              </div>
-              <form
-                className="composer"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void send();
-                }}
-              >
-                <label className="sr-only" htmlFor="action-input">
-                  你的行动
-                </label>
-                <textarea
-                  id="action-input"
-                  disabled={busy || !session}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={
-                    session
-                      ? "你想做什么，或让故事如何继续…"
-                      : "先选择作品并开始故事…"
-                  }
+                  onSettings={() => setSettings(true)}
                 />
-                <div className="composer-footer">
-                  <span role="status">
-                    {generating
-                      ? "故事正在续写…"
-                      : session
-                        ? "自动保存 · 自由输入"
-                        : "本地优先 · 由你掌握"}
-                  </span>
-                  <div className="composer-actions">
-                    <ModelPicker
-                      profiles={connections.profiles}
-                      selectedId={connections.selectedId}
-                      disabled={busy}
-                      onSelect={(selectedId) =>
-                        setConnections({ ...connections, selectedId })
-                      }
-                      onSettings={() => setSettings(true)}
-                    />
-                    {generating ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void api("sessions/" + session + "/stop", {}).catch(
-                            () => setError("停止请求失败，请稍后重试"),
-                          )
-                        }
-                      >
-                        停止生成
-                      </button>
-                    ) : (
-                      <button
-                        className="primary send-button"
-                        aria-label="继续故事"
-                        title="继续故事"
-                        disabled={busy || !session || !input.trim()}
-                      >
-                        <svg
-                          width="22"
-                          height="22"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M12 19V5m-6 6 6-6 6 6" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
+              }
+              onGenerate={async (draft) => {
+                const config = resolveConnection(connections);
+                const result = await api<{ opening: string; prompt: unknown }>(
+                  "sessions/" + session + "/opening",
+                  {
+                    draft,
+                    config,
+                    ...(!automaticBudget ? { budget, reserve } : {}),
+                    connectionId: connections.profiles.find(
+                      (p) => p.id === connections.selectedId,
+                    )?.saved
+                      ? connections.selectedId
+                      : undefined,
+                  },
+                ).catch(async (error) => {
+                  const latest = await api<PreparingSession>(
+                    "sessions/" + session,
+                  ).catch(() => null);
+                  if (latest) setLoadedSession(latest);
+                  throw error;
+                });
+                setPrompt(result.prompt);
+                return result;
+              }}
+            />
+          ) : (
+            <>
+              <ReadingView
+                busy={busy}
+                onRegenerate={() => void send("regenerate")}
+                onSwipe={(messageIndex, index) =>
+                  void action(async () => {
+                    await api<{ messages: Message[] }>(
+                      "sessions/" + session + "/swipe",
+                      { messageIndex, index },
+                    );
+                    await load(session);
+                  })
+                }
+                messages={messages}
+                draft={draft}
+                generating={generating}
+                suggestionsEnabled={suggestions && !!session}
+                onChoose={(text) => {
+                  setInput(text);
+                  document.getElementById("action-input")?.focus();
+                }}
+                onCopy={(text) =>
+                  void navigator.clipboard
+                    .writeText(text)
+                    .catch(() => setError("复制失败，请选择正文手动复制"))
+                }
+              />
+              {!messages.length && !draft && (
+                <div className="empty-reading">
+                  <span>一</span>
+                  <p>
+                    {work
+                      ? "一段设定，一句开场。\n故事的方向，由你决定。"
+                      : "你不必预先知道结局。\n从一个角色、一个念头开始。"}
+                  </p>
                 </div>
-              </form>
-              <p className="composer-hint">
-                一个动作、一句对白，或任何你想尝试的方向。
-              </p>
+              )}
+            </>
+          )}
+        </div>
+        {!preparing && (
+          <div className="composer-wrap">
+            <div className="composer-preferences">
+              <button
+                type="button"
+                className="suggestion-toggle"
+                role="switch"
+                aria-checked={suggestions && !!session}
+                aria-label="生成行动建议"
+                disabled={busy || !session}
+                title={
+                  session
+                    ? "按当前存档保存；建议只提供灵感，可自由输入"
+                    : "进入存档后可开启"
+                }
+                onClick={() =>
+                  void action(async () => {
+                    const enabled = !suggestions;
+                    await api("sessions/" + session + "/preferences", {
+                      suggestions: enabled,
+                    });
+                    setSuggestions(enabled);
+                  })
+                }
+              >
+                <span className="toggle-dot" aria-hidden="true" />
+                行动建议 <span>{suggestions && session ? "开" : "关"}</span>
+              </button>
             </div>
-          </>
+            <form
+              className="composer"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send();
+              }}
+            >
+              <label className="sr-only" htmlFor="action-input">
+                你的行动
+              </label>
+              <textarea
+                id="action-input"
+                disabled={busy || !session}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={
+                  session
+                    ? "你想做什么，或让故事如何继续…"
+                    : "先选择作品并开始故事…"
+                }
+              />
+              <div className="composer-footer">
+                <span role="status">
+                  {generating
+                    ? "故事正在续写…"
+                    : session
+                      ? "自动保存 · 自由输入"
+                      : "本地优先 · 由你掌握"}
+                </span>
+                <div className="composer-actions">
+                  <ModelPicker
+                    profiles={connections.profiles}
+                    selectedId={connections.selectedId}
+                    disabled={busy}
+                    onSelect={(selectedId) =>
+                      setConnections({ ...connections, selectedId })
+                    }
+                    onSettings={() => setSettings(true)}
+                  />
+                  {generating ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void api("sessions/" + session + "/stop", {}).catch(
+                          () => setError("停止请求失败，请稍后重试"),
+                        )
+                      }
+                    >
+                      停止生成
+                    </button>
+                  ) : (
+                    <button
+                      className="primary send-button"
+                      aria-label="继续故事"
+                      title="继续故事"
+                      disabled={busy || !session || !input.trim()}
+                    >
+                      <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 19V5m-6 6 6-6 6 6" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </form>
+            <p className="composer-hint">
+              一个动作、一句对白，或任何你想尝试的方向。
+            </p>
+          </div>
         )}
       </main>
       {storyPanel && (
@@ -591,6 +625,19 @@ function App() {
             story={loadedSession?.story}
             enabled={loadedSession?.options.storyTracking === true}
             busy={busy}
+            director={loadedSession?.options.director}
+            player={activePlayer}
+            onDirector={
+              session
+                ? async (director) => {
+                    await api("sessions/" + session + "/director", {
+                      director,
+                      revision: loadedSession?.options.directorRevision ?? 0,
+                    });
+                    await load(session);
+                  }
+                : undefined
+            }
             onToggle={() =>
               void action(async () => {
                 await api("sessions/" + session + "/options", {

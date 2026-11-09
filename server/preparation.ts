@@ -9,6 +9,54 @@ import { resolveBudget } from "./budget.js";
 import { sourceContext } from "./document-context.js";
 import { parseStory, storyInstruction } from "./story.js";
 import { visibleStory } from "../shared/story.js";
+import { createHash } from "node:crypto";
+import { parseSuggestions, suggestionInstruction } from "./suggestions.js";
+import { guideAnswers } from "../shared/opening-guide.js";
+import { directorInstruction } from "../shared/director.js";
+export function guideSource(store: Store, d: Preparation) {
+  const r = preparationResources(store, d);
+  const source = sourceContext(
+    store,
+    d.source,
+    "角色创建 身份 职业 阵营 开局流程",
+    6000,
+    "opening",
+  );
+  const text = [
+    source.text,
+    r.card.data.description,
+    r.card.data.personality,
+    r.card.data.scenario,
+    r.card.data.system_prompt,
+    r.card.data.post_history_instructions,
+    r.card.data.first_mes,
+    r.world?.data.first_mes,
+    r.world?.data.description,
+    r.book ? JSON.stringify(r.book.original) : "",
+    r.preset ? JSON.stringify(r.preset.original) : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const hash = createHash("sha256")
+    .update(
+      JSON.stringify([
+        text,
+        d.cardId,
+        d.worldId,
+        d.source,
+        source.document,
+        r.card.data,
+      ]),
+    )
+    .digest("hex");
+  return { text, hash };
+}
+function validateGuide(store: Store, d: Preparation) {
+  if (d.guide && guideSource(store, d).hash !== d.guide.sourceHash)
+    throw new Error(
+      "作品设定或资料分类已改变，请重新读取开局引导，或移除旧引导后继续",
+    );
+}
 export function recoverOpening(store: Store, id: string) {
   const session = ensurePreparation(store, id);
   const saved = store.draft(id);
@@ -18,7 +66,7 @@ export function recoverOpening(store: Store, id: string) {
   let warning =
     "正文已恢复；状态尚未验证，不会作为事实保存。请检查是否完整，再确认开始。";
   try {
-    opening = parseStory(saved.raw, []).text;
+    opening = parseSuggestions(parseStory(saved.raw, []).text).text;
     warning = "已恢复原开场，状态校验通过；未调用 AI。请预览后确认开始。";
   } catch {
     /* Explicit recovery keeps text, never unvalidated state. */
@@ -101,17 +149,21 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
   if (!d.opening.trim())
     throw new Error("请先选择、编写或生成开场剧情，再确认开始");
   const r = preparationResources(store, d);
+  validateGuide(store, d);
   sourceContext(store, d.source, d.opening); // Reject missing references before committing a new game.
   const generated = store.draft(id);
+  let openingChoices = parseSuggestions(d.opening);
   let openingStory;
   if (generated?.raw) {
     try {
       const parsed = parseStory(generated.raw, []);
       if (
-        parsed.text === d.opening &&
+        parseSuggestions(parsed.text).text === openingChoices.text &&
         expand(d.opening, r.card.data.name, d.player.name) === d.opening
-      )
+      ) {
         openingStory = parsed.story;
+        openingChoices = parseSuggestions(parsed.text);
+      }
     } catch {
       /* Manual opening is valid without generated state. */
     }
@@ -133,7 +185,8 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       JSON.stringify([
         {
           role: "assistant",
-          content: expand(d.opening, r.card.data.name, d.player.name),
+          content: expand(openingChoices.text, r.card.data.name, d.player.name),
+          suggestions: openingChoices.suggestions,
           raw: d.opening,
           story: openingStory,
         },
@@ -150,9 +203,14 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       worldbookId: d.worldbookId,
       storySource: d.source,
       storyTracking: true,
+      openingGuide: d.guide,
       name: s.options.name ?? d.source?.name,
     });
     store.db.prepare("DELETE FROM turn_drafts WHERE sessionId=?").run(id);
+    // A new game offers suggestions by default; an explicit saved preference
+    // (including off) is retained. Existing saves are not migrated.
+    if (!store.db.prepare("SELECT id FROM preferences WHERE id=?").get(id))
+      store.setSuggestions(id, true);
     store.db.exec("COMMIT");
     return store.session(id);
   } catch (e) {
@@ -178,6 +236,7 @@ export function openingRequest(
   });
   if (parameters.seed === -1) delete parameters.seed;
   const limits = resolveBudget(budget, reserve, preset);
+  validateGuide(store, d);
   const source = sourceContext(
     store,
     d.source,
@@ -195,7 +254,11 @@ export function openingRequest(
       ...s.options,
       automaticBudget: limits.automaticBudget,
       player: d.player,
-      worldDescription: [source.text, r.world?.data.description]
+      worldDescription: [
+        source.text,
+        r.world?.data.description,
+        guideAnswers(d.guide),
+      ]
         .filter(Boolean)
         .join("\n\n"),
       cardWorldbook: r.world?.data.worldbook,
@@ -205,7 +268,15 @@ export function openingRequest(
         "本次生成可供玩家预览的开场，尊重作者设定；未指定玩家身份时留出自由参与空间，不替玩家决定后续行动。已有草稿仅作参考：\n" +
         d.opening +
         "\n" +
-        storyInstruction,
+        storyInstruction +
+        "\n" +
+        directorInstruction(s.options.director) +
+        "\n" +
+        (store.db
+          .prepare("SELECT suggestions FROM preferences WHERE id=?")
+          .get(id)?.suggestions === 0
+          ? ""
+          : suggestionInstruction.replace("在末尾", "在故事状态标签之前")),
     },
   );
   return {

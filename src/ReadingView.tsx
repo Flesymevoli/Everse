@@ -1,6 +1,6 @@
 import { variantsOf, activeVariant } from "../shared/swipes";
 import type { Message } from "../server/context";
-import { readingDraft } from "../server/suggestions";
+import { readingDraft, textSuggestions } from "../server/suggestions";
 import { visibleStory } from "../shared/story";
 
 interface Props {
@@ -27,7 +27,9 @@ export function ReadingView({
 }: Props) {
   const choices =
     !generating && suggestionsEnabled
-      ? (messages.at(-1)?.suggestions ?? [])
+      ? messages.at(-1)?.suggestions?.length
+        ? messages.at(-1)!.suggestions!
+        : textSuggestions(messages.at(-1)?.content ?? "")
       : [];
   const visibleDraft = visibleStory(
     suggestionsEnabled && generating ? readingDraft(draft) : draft,

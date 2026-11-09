@@ -1,6 +1,7 @@
 import { preparationSchema } from "../shared/preparation.js";
 import { playerSchema } from "../shared/player.js";
 import { z } from "zod";
+import { directorSchema } from "../shared/director.js";
 import { parametersSchema } from "./preset.js";
 export const optionsSchema = z
   .object({
@@ -9,6 +10,9 @@ export const optionsSchema = z
     openingState: z.enum(["preparing", "started"]).optional(),
     openingDraft: preparationSchema.optional(),
     player: playerSchema.optional(),
+    openingGuide: preparationSchema.shape.guide,
+    director: directorSchema.optional(),
+    directorRevision: z.number().int().nonnegative().optional(),
     worldId: z.string().nullable().optional(),
     recursive: z.boolean().optional(),
     maxRecursionSteps: z.number().int().min(0).max(500).optional(),

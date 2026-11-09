@@ -6,6 +6,9 @@ import {
   recoverOpening,
 } from "./preparation.js";
 import { randomUUID } from "node:crypto";
+import { generateOpeningGuide } from "./opening-guide.js";
+import { guideAnswers } from "../shared/opening-guide.js";
+import { directorSchema, directorInstruction } from "../shared/director.js";
 import { extractWord } from "./documents.js";
 import { sourceContext } from "./document-context.js";
 import {
@@ -220,6 +223,65 @@ export function createApp(
     if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
     return c.json(recoverOpening(store, id));
   });
+  app.post("/api/sessions/:id/guide", async (c) => {
+    const id = c.req.param("id"),
+      body = turn
+        .pick({ config: true, connectionId: true })
+        .extend({ draft: preparationSchema })
+        .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    if (body.connectionId && !body.config.mock)
+      body.config = await vault.config(body.connectionId);
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    const controller = new AbortController();
+    busy.add(id);
+    controllers.set(id, controller);
+    try {
+      return c.json({
+        guide: await generateOpeningGuide(
+          store,
+          id,
+          body.draft,
+          body.config,
+          controller.signal,
+        ),
+      });
+    } finally {
+      busy.delete(id);
+      controllers.delete(id);
+    }
+  });
+  app.post("/api/sessions/:id/director", async (c) => {
+    const id = c.req.param("id"),
+      body = z
+        .object({
+          revision: z.number().int().nonnegative(),
+          director: directorSchema,
+        })
+        .strict()
+        .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    const session = store.session(id);
+    if (session.options.archived) throw new Error("请先恢复归档存档");
+    if ((session.options.directorRevision ?? 0) !== body.revision)
+      return c.json({ error: "引导已在其他页面修改，请重新打开存档" }, 409);
+    store.db.exec("BEGIN IMMEDIATE");
+    try {
+      store.db
+        .prepare("INSERT INTO director_revisions(sessionId,body) VALUES (?,?)")
+        .run(id, JSON.stringify(session.options.director ?? {}));
+      store.setOptions(id, {
+        ...session.options,
+        director: body.director,
+        directorRevision: body.revision + 1,
+      });
+      store.db.exec("COMMIT");
+    } catch (error) {
+      store.db.exec("ROLLBACK");
+      throw error;
+    }
+    return c.json({ ok: true });
+  });
   app.post("/api/sessions/:id/opening", async (c) => {
     const body = turn
         .pick({ config: true, connectionId: true, budget: true, reserve: true })
@@ -269,9 +331,10 @@ export function createApp(
         base: historyKey([]),
         error: "",
       });
-      savePreparation(store, id, { ...body.draft, opening: parsed.text });
+      const openingText = parseSuggestions(parsed.text).text;
+      savePreparation(store, id, { ...body.draft, opening: openingText });
       status = "completed";
-      return c.json({ opening: parsed.text, prompt: request.prompt });
+      return c.json({ opening: openingText, prompt: request.prompt });
     } catch (error) {
       store.saveDraft(id, {
         raw: opening,
@@ -399,7 +462,13 @@ export function createApp(
   app.post("/api/sessions/:id/options", async (c) => {
     const id = c.req.param("id");
     const options = optionsSchema
-      .omit({ openingState: true, openingDraft: true })
+      .omit({
+        openingState: true,
+        openingDraft: true,
+        openingGuide: true,
+        director: true,
+        directorRevision: true,
+      })
       .parse(await c.req.json());
     if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
     for (const [key, kind] of [
@@ -789,7 +858,11 @@ export function createApp(
         session.options.player ??
         readPlayer(worldCard?.world.data) ??
         readPlayer(runtimeCard.data),
-      worldDescription: [source.text, worldCard?.world.data.description]
+      worldDescription: [
+        source.text,
+        worldCard?.world.data.description,
+        guideAnswers(session.options.openingGuide),
+      ]
         .filter(Boolean)
         .join("\n\n"),
       cardWorldbook: worldCard?.world.data.worldbook,
@@ -805,6 +878,7 @@ export function createApp(
             : suggestionInstruction
           : "",
         tracking ? memory.text + "\n" + storyInstruction : "",
+        directorInstruction(session.options.director),
       ]
         .filter(Boolean)
         .join("\n\n"),
