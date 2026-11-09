@@ -1,3 +1,5 @@
+import { CreationGuide, PlayerFields } from "./CreationGuide";
+import { readPlayer } from "../shared/player";
 import { BookEntryFields, type BookDraft } from "./BookEntryFields";
 import { createPortal } from "react-dom";
 import { useState } from "react";
@@ -24,6 +26,7 @@ export function Library({
   onRefresh,
   onLoad,
   onStart,
+  onCreated,
 }: {
   characters: Character[];
   worlds: WorldItem[];
@@ -32,8 +35,11 @@ export function Library({
   busy: boolean;
   onRefresh: () => Promise<void>;
   onLoad: (id: string) => void;
+  onCreated: (id: string) => Promise<void>;
   onStart: (cardId: string, worldId: string) => Promise<void>;
 }) {
+  const [playerName, setPlayerName] = useState(""),
+    [playerDescription, setPlayerDescription] = useState("");
   const [book, setBook] = useState<BookDraft>({ entries: {} });
   const [tab, setTab] = useState<"characters" | "worlds">("characters");
   const [dialog, setDialog] = useState<"create" | "edit" | "start" | null>(
@@ -113,6 +119,8 @@ export function Library({
         <button
           disabled={locked}
           onClick={() => {
+            setPlayerName("");
+            setPlayerDescription("");
             setBook({ entries: {} });
             setName("");
             setDescription("");
@@ -179,6 +187,9 @@ export function Library({
                 <button
                   disabled={locked}
                   onClick={() => {
+                    const player = readPlayer(c.card.data);
+                    setPlayerName(player?.name ?? "");
+                    setPlayerDescription(player?.description ?? "");
                     setEditingId(c.id);
                     setName(c.card.data.name);
                     setDescription(c.card.data.description);
@@ -216,6 +227,9 @@ export function Library({
                 <button
                   disabled={locked}
                   onClick={() => {
+                    const player = readPlayer(w.world.data);
+                    setPlayerName(player?.name ?? "");
+                    setPlayerDescription(player?.description ?? "");
                     setEditingId(w.id);
                     setName(w.world.data.name);
                     setDescription(w.world.data.description);
@@ -297,35 +311,49 @@ export function Library({
               }}
               onSubmit={(e) => {
                 e.preventDefault();
+                const startNow =
+                  (e.nativeEvent as SubmitEvent).submitter?.getAttribute(
+                    "value",
+                  ) !== "save";
                 void run(async () => {
                   if (dialog === "start") {
                     await onStart(cardId, worldId);
+                  } else if (dialog === "create") {
+                    const created = await post("creations", {
+                      kind: tab,
+                      name,
+                      description,
+                      opening,
+                      personality,
+                      scenario,
+                      player: {
+                        name: playerName,
+                        description: playerDescription,
+                      },
+                      ...(tab === "worlds" ? { worldbook: book } : {}),
+                      start: startNow,
+                    });
+                    await onRefresh();
+                    if (created.sessionId) await onCreated(created.sessionId);
                   } else {
                     const data = {
                       name,
                       description,
                       first_mes: opening,
+                      player: {
+                        name: playerName,
+                        description: playerDescription,
+                      },
                       ...(tab === "characters"
                         ? { personality, scenario }
                         : { worldbook: book }),
                     };
-                    if (dialog === "edit")
-                      await post(
-                        (tab === "worlds" ? "worlds/" : "cards/") +
-                          editingId +
-                          "/edit",
-                        data,
-                      );
-                    else if (tab === "worlds")
-                      await post("worlds", {
-                        original: { spec: "yuno_world_v1", data },
-                      });
-                    else
-                      await post("cards", {
-                        spec: "chara_card_v2",
-                        spec_version: "2.0",
-                        data,
-                      });
+                    await post(
+                      (tab === "worlds" ? "worlds/" : "cards/") +
+                        editingId +
+                        "/edit",
+                      data,
+                    );
                     await onRefresh();
                   }
                   setDialog(null);
@@ -379,6 +407,43 @@ export function Library({
                       至少选择一本世界书或一张角色卡。世界书的开场优先，未填写时使用角色开场；不会自动扩写设定。
                     </p>
                   </>
+                ) : dialog === "create" ? (
+                  <CreationGuide
+                    kind={tab}
+                    name={name}
+                    description={description}
+                    opening={opening}
+                    playerName={playerName}
+                    playerDescription={playerDescription}
+                    onName={setName}
+                    onDescription={setDescription}
+                    onOpening={setOpening}
+                    onPlayerName={setPlayerName}
+                    onPlayerDescription={setPlayerDescription}
+                  >
+                    {tab === "worlds" ? (
+                      <BookEntryFields book={book} onChange={setBook} />
+                    ) : (
+                      <>
+                        <label>
+                          性格（可选）
+                          <textarea
+                            value={personality}
+                            maxLength={100000}
+                            onChange={(e) => setPersonality(e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          长期场景设定（可选）
+                          <textarea
+                            value={scenario}
+                            maxLength={100000}
+                            onChange={(e) => setScenario(e.target.value)}
+                          />
+                        </label>
+                      </>
+                    )}
+                  </CreationGuide>
                 ) : (
                   <>
                     <label>
@@ -423,6 +488,12 @@ export function Library({
                         </label>
                       </>
                     )}
+                    <PlayerFields
+                      name={playerName}
+                      description={playerDescription}
+                      onName={setPlayerName}
+                      onDescription={setPlayerDescription}
+                    />
                     {dialog === "edit" && (
                       <p className="muted">
                         其他导入字段原样保留。已有聊天和开场不会改写；设定从下一轮生效，新开场用于新存档。
@@ -443,22 +514,34 @@ export function Library({
                     {error}
                   </p>
                 )}
-                <button
-                  type="submit"
-                  className="primary"
-                  disabled={
-                    dialog === "start" ? !cardId && !worldId : !name.trim()
-                  }
-                >
-                  {dialog === "start"
-                    ? "开始故事"
-                    : tab === "worlds"
-                      ? "保存世界书"
-                      : "保存角色卡"}
-                </button>
-                <button type="button" onClick={() => setDialog(null)}>
-                  取消
-                </button>
+                <div className="form-actions">
+                  <button
+                    type="submit"
+                    value="start"
+                    className="primary"
+                    disabled={
+                      dialog === "start"
+                        ? !cardId && !worldId
+                        : dialog === "edit" && !name.trim()
+                    }
+                  >
+                    {dialog === "create"
+                      ? "创建并开始"
+                      : dialog === "start"
+                        ? "开始故事"
+                        : tab === "worlds"
+                          ? "保存世界书"
+                          : "保存角色卡"}
+                  </button>
+                  {dialog === "create" && (
+                    <button type="submit" value="save">
+                      仅保存作品
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setDialog(null)}>
+                    取消
+                  </button>
+                </div>
               </fieldset>
             </form>
           </div>,

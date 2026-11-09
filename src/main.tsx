@@ -1,3 +1,4 @@
+import { readPlayer } from "../shared/player";
 import { Library, type WorldItem } from "./Library";
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -80,6 +81,8 @@ function App() {
     [reserve, setReserve] = useState(1024);
   const work = works.find((w) => w.id === selected);
   const activeWorld = worlds.find((w) => w.id === activeWorldId);
+  const activePlayer =
+    readPlayer(activeWorld?.world.data) ?? readPlayer(work?.card.data);
   async function refresh() {
     const [w, s, worlds] = await Promise.all([
       api<Work[]>("cards"),
@@ -227,6 +230,7 @@ function App() {
           busy={busy}
           onRefresh={refresh}
           onLoad={(id) => void action(() => load(id))}
+          onCreated={load}
           onStart={async (cardId, worldId) => {
             setBusy(true);
             try {
@@ -263,14 +267,14 @@ function App() {
             !busy &&
             messages.length <= 1 &&
             !messages.some((message) => message.role !== "assistant") &&
-            greetings(work.card).length > 1 && (
+            greetings(work.card, activePlayer?.name).length > 1 && (
               <label className="greeting-choice">
                 开场白
                 <select
                   aria-label="选择开场白"
                   value={Math.max(
                     0,
-                    greetings(work.card).indexOf(messages[0]?.content ?? ""),
+                    greetings(work.card, activePlayer?.name).indexOf(messages[0]?.content ?? ""),
                   )}
                   onChange={(event) => {
                     const index = Number(event.target.value);
@@ -284,7 +288,7 @@ function App() {
                     });
                   }}
                 >
-                  {greetings(work.card).map((text, index) => (
+                  {greetings(work.card, activePlayer?.name).map((text, index) => (
                     <option key={index} value={index}>
                       {index === 0 ? "默认开场" : `备选 ${index}`} ·{" "}
                       {text.slice(0, 45) || "空开场"}

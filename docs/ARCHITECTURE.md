@@ -40,3 +40,7 @@ Library.tsx 负责世界/角色分类、新建、导入、角色编辑和开局�
 ## 世界书编辑
 
 界面统一使用“世界书”；为避免迁移旧存档，内部 worlds、worldId、yuno_world_v1 保持兼容。world-edit.ts 合并世界书元信息及编辑后的条目，未知字段保留；ST 原生 entries 导出形状不变，应用元信息写入 _yunotavern 并在重导入时恢复。BookEntryFields.tsx 共用于作品库和独立世界书管理区。assets 更新及 asset_revisions 备份在同一事务中，不更新 sessions。生成接口每轮重读资源，相关会话 busy 时拒绝资源编辑。
+
+## 引导创建
+
+server/creation.ts 校验简单表单并映射到现有 V2 角色卡或 yuno_world_v1 世界书；在同一 SQLite 事务创建资源及可选会话，失败回滚。shared/player.ts 在 extensions.yunotavern.player 保存玩家称呼/背景，并合并保留其他扩展；运行时选择世界书的非空玩家设定，否则回退角色卡，作为单独系统上下文参与预算，{{user}} 使用该称呼。没有设定时保持旧行为。它不是完整 ST Persona 实现。CreationGuide.tsx 仅负责现有创建表单的渐进呈现，Library 保留完整编辑入口。
