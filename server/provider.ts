@@ -7,10 +7,11 @@ export interface Config {
   mock: boolean;
   parameters?: Parameters;
 }
+export class ModelRequestError extends Error {}
 export async function* generate(
   config: Config,
   messages: Message[],
-  maxTokens: number,
+  maxTokens: number | undefined,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
   if (config.mock) {
@@ -49,8 +50,23 @@ export async function* generate(
       max_tokens: maxTokens,
     }),
   });
-  if (!response.ok || !response.body)
-    throw new Error("模型请求失败，HTTP " + response.status);
+  if (!response.ok || !response.body) {
+    const detail = await response.text();
+    const reason =
+      /context_length|context window|maximum context|too many tokens|prompt.{0,30}too long/i.test(
+        detail,
+      )
+        ? "供应商报告上下文过长。请按该模型的实际容量配置手动上下文预算；如果必要设定本身超限，请精简设定。"
+        : /max_tokens|max_completion_tokens|output.{0,20}tokens/i.test(detail)
+          ? "供应商拒绝回复长度参数。请检查绑定预设/手动回复上限及该 API 支持的参数；自动模式未绑定上限时不发送 max_tokens。"
+          : response.status === 401 || response.status === 403
+            ? "请检查 API Key 和模型访问权限。"
+            : "请检查模型 ID、API 地址及供应商状态。";
+    // Do not echo provider bodies: some gateways reflect credentials or prompt text.
+    throw new ModelRequestError(
+      `模型 API 返回 HTTP ${response.status}：${reason}未自动重试。`,
+    );
+  }
   let buffer = "";
   let done = false;
   for await (const chunk of response.body.pipeThrough(
@@ -74,7 +90,9 @@ export async function* generate(
       if (value.error) throw new Error("模型返回错误");
       const choice = value.choices?.[0];
       if (choice?.finish_reason === "length")
-        throw new Error("回复达到输出上限，请提高预算后重试");
+        throw new ModelRequestError(
+          "模型 API 报告回复达到输出上限（finish_reason=length），未保存不完整回复。请检查供应商默认回复长度或调整预设/手动回复上限；未自动重试。",
+        );
       if (choice?.finish_reason === "stop") done = true;
       if (typeof choice?.delta?.content === "string")
         yield choice.delta.content;

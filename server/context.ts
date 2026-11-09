@@ -33,6 +33,7 @@ export function buildContext(
     preferCharacterPrompt?: boolean;
     preferCharacterInstructions?: boolean;
     extraInstruction?: string;
+    automaticBudget?: boolean;
   } = {},
 ) {
   const expand = (text: string, name: string) =>
@@ -203,6 +204,9 @@ export function buildContext(
   };
   const estimate = (messages: Message[]) =>
     messages.reduce((n, m) => n + Buffer.byteLength(m.content, "utf8") + 8, 0);
+  // Unknown model capacity: this is a trimming target, never a claimed API limit.
+  if (options.automaticBudget)
+    budget = Math.max(budget, estimate(assemble(recent.slice(-2))) + reserve);
   while (recent.length && estimate(assemble(recent)) + reserve > budget) {
     recent.shift();
     while (recent[0]?.role === "assistant") recent.shift();
@@ -210,13 +214,25 @@ export function buildContext(
   const messages = assemble(recent);
   const estimatedTokens = estimate(messages);
   if (estimatedTokens + reserve > budget)
-    throw new Error("角色与输入超出预算，请缩短输入或提高上下文预算");
+    throw new Error(
+      `本地配置的上下文预算不足：必要设定与当前输入保守估算 ${estimatedTokens}，回复预留 ${reserve}，配置 ${budget}。历史已裁剪；请调整手动预算/预设或精简设定。这不是 API 返回的模型限制。`,
+    );
   return {
     messages,
     estimatedTokens,
     budget,
     reserve,
     omitted: history.length - recent.length,
+    warnings: [
+      ...(options.automaticBudget
+        ? ["模型真实容量未知；上下文目标按必要设定自动扩展，不保证供应商接受。"]
+        : []),
+      ...(history.length > recent.length
+        ? [
+            `本次请求省略 ${history.length - recent.length} 条较早消息；存档原文保留，未生成摘要。`,
+          ]
+        : []),
+    ],
     matchedEntries: entries.length,
     matchedWorldEntries: world.matched,
     worldDepthInjections: world.injections,

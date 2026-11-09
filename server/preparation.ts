@@ -5,6 +5,7 @@ import type { Store } from "./store.js";
 import { buildContext } from "./context.js";
 import { presetSchema, importPreset, parametersSchema } from "./preset.js";
 import type { Config } from "./provider.js";
+import { resolveBudget } from "./budget.js";
 export function ensurePreparation(store: Store, id: string) {
   const s = store.session(id);
   if (s.options.archived) throw new Error("请先恢复归档存档");
@@ -90,19 +91,17 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       : d.worldMode === "existing"
         ? d.worldId
         : null;
-    store.db
-      .prepare("UPDATE sessions SET cardId=?,messages=? WHERE id=?")
-      .run(
-        cardId,
-        JSON.stringify([
-          {
-            role: "assistant",
-            content: expand(d.opening, r.card.data.name, d.player.name),
-            raw: d.opening,
-          },
-        ]),
-        id,
-      );
+    store.db.prepare("UPDATE sessions SET cardId=?,messages=? WHERE id=?").run(
+      cardId,
+      JSON.stringify([
+        {
+          role: "assistant",
+          content: expand(d.opening, r.card.data.name, d.player.name),
+          raw: d.opening,
+        },
+      ]),
+      id,
+    );
     store.setOptions(id, {
       ...s.options,
       worldId,
@@ -124,8 +123,8 @@ export function openingRequest(
   id: string,
   d: Preparation,
   config: Config,
-  budget: number,
-  reserve: number,
+  budget: number | undefined,
+  reserve: number | undefined,
 ) {
   const s = ensurePreparation(store, id),
     r = preparationResources(store, d),
@@ -136,14 +135,16 @@ export function openingRequest(
     ...config.parameters,
   });
   if (parameters.seed === -1) delete parameters.seed;
+  const limits = resolveBudget(budget, reserve, preset);
   const prompt = buildContext(
     r.card,
     [],
     "请根据已提供的背景与人物设定写出故事开场。",
-    preset?.openai_max_context ?? budget,
-    preset?.openai_max_tokens ?? reserve,
+    limits.budget,
+    limits.reserve,
     {
       ...s.options,
+      automaticBudget: limits.automaticBudget,
       player: d.player,
       worldDescription: r.world?.data.description,
       cardWorldbook: r.world?.data.worldbook,
@@ -154,5 +155,14 @@ export function openingRequest(
         d.opening,
     },
   );
-  return { prompt, config: { ...config, parameters } };
+  return {
+    prompt: {
+      ...prompt,
+      budgetSource: limits.budgetSource,
+      outputSource: limits.outputSource,
+      maxTokens: limits.maxTokens ?? null,
+    },
+    maxTokens: limits.maxTokens,
+    config: { ...config, parameters },
+  };
 }

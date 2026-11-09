@@ -6,6 +6,7 @@ import {
 } from "./preparation.js";
 import { preparationSchema } from "../shared/preparation.js";
 import { validationMessage } from "./validation.js";
+import { tokenLimit, resolveBudget } from "./budget.js";
 import { createWork } from "./creation.js";
 import { readPlayer, withPlayer, playerSchema } from "../shared/player.js";
 import { editWorld } from "./world-edit.js";
@@ -19,7 +20,7 @@ import { z } from "zod";
 import { importCard, expand, greetings } from "./cards.js";
 import { buildContext } from "./context.js";
 import { parseSuggestions, suggestionInstruction } from "./suggestions.js";
-import { generate } from "./provider.js";
+import { generate, ModelRequestError } from "./provider.js";
 import type { Store } from "./store.js";
 import { readPngCard } from "./png-card.js";
 import { importBook } from "./worldbook.js";
@@ -35,8 +36,8 @@ import {
 const turn = z.object({
   mode: z.enum(["send", "regenerate"]).default("send"),
   input: z.string().trim().max(20000).default(""),
-  budget: z.number().int().min(2048).max(128000).default(8192),
-  reserve: z.number().int().min(64).max(8192).default(1024),
+  budget: tokenLimit.optional(),
+  reserve: tokenLimit.optional(),
   connectionId: z.string().min(1).max(100).optional(),
   config: z.object({
     baseUrl: z.string().url(),
@@ -121,7 +122,7 @@ export function createApp(
       for await (const part of generate(
         request.config,
         request.prompt.messages,
-        request.prompt.reserve,
+        request.maxTokens,
         controller.signal,
       )) {
         opening += part;
@@ -131,10 +132,13 @@ export function createApp(
       if (!opening.trim()) throw new Error("空开场");
       savePreparation(store, id, { ...body.draft, opening });
       return c.json({ opening, prompt: request.prompt });
-    } catch {
+    } catch (error) {
       return c.json(
         {
-          error: "开场生成未完成，原草稿已保留。请检查模型配置或稍后手动重试。",
+          error:
+            error instanceof ModelRequestError
+              ? error.message + "原草稿已保留。"
+              : "开场生成未完成，原草稿已保留。请检查模型配置或稍后手动重试。",
         },
         400,
       );
@@ -530,8 +534,8 @@ export function createApp(
       ...body.config.parameters,
     });
     if (parameters.seed === -1) delete parameters.seed;
-    const budget = preset?.openai_max_context ?? body.budget;
-    const reserve = preset?.openai_max_tokens ?? body.reserve;
+    const limits = resolveBudget(body.budget, body.reserve, preset);
+    const { budget, reserve } = limits;
     let history = session.messages;
     let input = body.input;
     if (body.mode === "regenerate") {
@@ -553,6 +557,7 @@ export function createApp(
       worldbook: worldbook?.original,
       preset: presetAsset?.original,
       ...session.options,
+      automaticBudget: limits.automaticBudget,
       scanDepth: session.options.scanDepth,
       extraInstruction: session.suggestions ? suggestionInstruction : undefined,
     });
@@ -568,14 +573,20 @@ export function createApp(
         await s.write(
           JSON.stringify({
             type: "prompt",
-            prompt: { ...prompt, parameters },
+            prompt: {
+              ...prompt,
+              parameters,
+              budgetSource: limits.budgetSource,
+              outputSource: limits.outputSource,
+              maxTokens: limits.maxTokens ?? null,
+            },
           }) + "\n",
         );
         let reply = "";
         for await (const text of generate(
           { ...body.config, parameters },
           prompt.messages,
-          reserve,
+          limits.maxTokens,
           controller.signal,
         )) {
           reply += text;

@@ -18,7 +18,7 @@ export function validationMessage(error: z.ZodError) {
       const field = labels[path] ?? (path || "请求字段");
       switch (issue.code) {
         case "too_small":
-          return `${field}：不能小于 ${issue.minimum}`;
+          return `${field}：${issue.inclusive ? "不能小于" : "必须大于"} ${issue.minimum}`;
         case "too_big":
           return `${field}：不能超过 ${issue.maximum}`;
         case "unrecognized_keys":

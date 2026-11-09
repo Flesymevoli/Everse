@@ -48,3 +48,5 @@ server/creation.ts 校验简单表单并映射到现有 V2 角色卡或 yuno_wor
 ## 开局准备增量
 
 开局数据流：session_options 中的准备草稿 → 现有角色/世界资源或简单资源 → 开场预览 → SQLite 事务确认 → 原回合链路。实现见 shared/preparation.ts、server/preparation.ts、src/OpeningPreparation.tsx。生成复用原 provider/context，不引入 Agent；准备状态与草稿不允许通过通用 options 接口绕过确认写入。完整说明见 OPENING-FLOW.md。
+
+预算策略由 server/budget.ts 统一：默认自动目标而非模型硬上限；保留预设覆盖；模型默认回复长度时省略 max_tokens。context.ts 仍只裁剪请求历史，未新增摘要/长期记忆。来源、估算和限制见 BUDGETS.md。

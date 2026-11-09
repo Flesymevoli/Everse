@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tokenLimit } from "./budget.js";
 export const parametersSchema = z
   .object({
     temperature: z.number().min(0).max(2).optional(),
@@ -18,8 +19,8 @@ export const presetSchema = z
     presence_penalty: z.number().optional(),
     seed: z.number().optional(),
     stop: z.array(z.string()).optional(),
-    openai_max_tokens: z.number().int().min(64).max(8192).optional(),
-    openai_max_context: z.number().int().min(2048).max(128000).optional(),
+    openai_max_tokens: tokenLimit.optional(),
+    openai_max_context: tokenLimit.optional(),
     prompts: z
       .array(
         z

@@ -90,6 +90,7 @@ function App() {
   }, [connections]);
   const [budget, setBudget] = useState(8192),
     [reserve, setReserve] = useState(1024);
+  const [automaticBudget, setAutomaticBudget] = useState(true);
   const work = works.find((w) => w.id === selected);
   const activeWorld = worlds.find((w) => w.id === activeWorldId);
   const activePlayer =
@@ -159,8 +160,7 @@ function App() {
         body: JSON.stringify({
           input,
           config,
-          budget,
-          reserve,
+          ...(!automaticBudget ? { budget, reserve } : {}),
           mode,
           connectionId: connections.profiles.find(
             (p) => p.id === connections.selectedId,
@@ -354,8 +354,7 @@ function App() {
                 {
                   draft,
                   config,
-                  budget,
-                  reserve,
+                  ...(!automaticBudget ? { budget, reserve } : {}),
                   connectionId: connections.profiles.find(
                     (p) => p.id === connections.selectedId,
                   )?.saved
@@ -608,28 +607,41 @@ function App() {
               disabled={busy}
             />
             <fieldset disabled={busy}>
-              <div className="budget-fields">
-                <label>
-                  上下文预算
-                  <input
-                    type="number"
-                    min="2048"
-                    max="128000"
-                    value={budget}
-                    onChange={(e) => setBudget(Number(e.target.value))}
-                  />
-                </label>
-                <label>
-                  回复上限
-                  <input
-                    type="number"
-                    min="64"
-                    max="8192"
-                    value={reserve}
-                    onChange={(e) => setReserve(Number(e.target.value))}
-                  />
-                </label>
-              </div>
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={automaticBudget}
+                  onChange={(e) => setAutomaticBudget(e.target.checked)}
+                />
+                自动管理上下文与回复预算
+              </label>
+              <p className="muted">
+                默认按需裁剪较早聊天，存档原文不变；不额外生成记忆摘要。模型容量未知时不以估算阻止开局。回复使用
+                API
+                默认长度，可能影响费用；绑定预设的明确预算仍优先生效。取消勾选可手动限制。
+              </p>
+              {!automaticBudget && (
+                <div className="budget-fields">
+                  <label>
+                    上下文预算
+                    <input
+                      type="number"
+                      min="1"
+                      value={budget}
+                      onChange={(e) => setBudget(Number(e.target.value))}
+                    />
+                  </label>
+                  <label>
+                    回复上限
+                    <input
+                      type="number"
+                      min="1"
+                      value={reserve}
+                      onChange={(e) => setReserve(Number(e.target.value))}
+                    />
+                  </label>
+                </div>
+              )}
             </fieldset>
             <details>
               <summary>管理世界书、预设与聊天</summary>

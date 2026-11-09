@@ -210,7 +210,7 @@ test("字段错误明确指出回复预算/模型字段，不回显 API Key", as
     assert.equal(invalid.status, 400);
     assert.match(
       ((await invalid.json()) as { error: string }).error,
-      /回复上限.*64/,
+      /回复上限.*0/,
     );
     const invalidKey = await post(app, "/api/sessions/" + id + "/opening", {
       draft,
