@@ -16,14 +16,17 @@
   "dependencies": {
     "@hono/node-server": "^1.19.0",
     "hono": "^4.9.0",
+    "mammoth": "^1.13.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "yauzl": "^3.4.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/yauzl": "^3.4.0",
     "concurrently": "^9.2.0",
     "prettier": "^3.9.10",
     "tsx": "^4.20.0",

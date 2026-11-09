@@ -1,5 +1,7 @@
 # 架构
 
+Word 导入增量：`server/documents.ts` 在本机受限读取 DOCX，Mammoth 只提取文字；`source_documents` 保留原始文件，准备页的 source 保存 documentId、格式、提取文本和兼容提示。与 TXT 和现有开局使用同一条数据链路，不调用模型；详见 [WORD-IMPORT.md](WORD-IMPORT.md)。下文“尚无 Word”描述的是此前状态增量的边界，本增量已补上 DOCX 纯文字导入，旧 DOC/OCR 仍不支持。
+
 ## 故事状态增量（2026-11-09）
 
 `shared/preparation.ts` 的可选 source 保存文本名称、格式和原文；确认后保存到 session_options.storySource。无卡片的作品仅在上下文适配时使用空角色视图，不创建或伪装成 ST 角色卡。旧 cardId/worldId 不迁移。TXT/Markdown 当前完整设定参与请求，尚未分段检索作者长文。

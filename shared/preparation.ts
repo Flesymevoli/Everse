@@ -9,8 +9,10 @@ export const preparationSchema = z
     source: z
       .object({
         name: z.string().max(100),
-        format: z.enum(["text", "txt", "md"]),
+        format: z.enum(["text", "txt", "md", "docx"]),
         text: z.string().max(100000),
+        documentId: z.string().uuid().optional(),
+        warnings: z.array(z.string().max(4000)).max(20).optional(),
       })
       .strict()
       .optional(),

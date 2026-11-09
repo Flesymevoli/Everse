@@ -5,6 +5,7 @@ import {
   ensurePreparation,
 } from "./preparation.js";
 import { randomUUID } from "node:crypto";
+import { extractWord } from "./documents.js";
 import {
   historyKey,
   parseStory,
@@ -93,6 +94,33 @@ export function createApp(
       400,
     ),
   );
+  app.post("/api/documents/word", async (c) => {
+    const name = z.string().min(1).max(200).parse(c.req.query("name"));
+    const buffer = Buffer.from(await c.req.arrayBuffer());
+    const extracted = await extractWord(buffer, name);
+    const documentId = randomUUID();
+    store.db
+      .prepare("INSERT INTO source_documents VALUES (?,?,?)")
+      .run(documentId, name, buffer);
+    return c.json({
+      name: name.slice(0, 100),
+      format: "docx",
+      ...extracted,
+      documentId,
+    });
+  });
+  app.get("/api/documents/:id/original", (c) => {
+    const row = store.db
+      .prepare("SELECT body FROM source_documents WHERE id=?")
+      .get(c.req.param("id"));
+    if (!row) return c.json({ error: "原始文档不存在" }, 404);
+    c.header(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    c.header("Content-Disposition", 'attachment; filename="original.docx"');
+    return c.body(new Uint8Array(row.body as Uint8Array));
+  });
   app.post("/api/sessions/:id/preparation", async (c) => {
     const body = await c.req.json(),
       id = c.req.param("id");

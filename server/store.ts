@@ -8,6 +8,9 @@ export class Store {
   db: DatabaseSync;
   constructor(path: string) {
     this.db = new DatabaseSync(path);
+    this.db.exec(
+      "CREATE TABLE IF NOT EXISTS source_documents(id TEXT PRIMARY KEY, name TEXT NOT NULL, body BLOB NOT NULL)",
+    );
     this.db
       .exec(`CREATE TABLE IF NOT EXISTS story_corrections(id INTEGER PRIMARY KEY, sessionId TEXT NOT NULL, anchor TEXT NOT NULL, count INTEGER NOT NULL, key TEXT NOT NULL, value TEXT);
       CREATE TABLE IF NOT EXISTS turn_drafts(sessionId TEXT PRIMARY KEY, body TEXT NOT NULL);

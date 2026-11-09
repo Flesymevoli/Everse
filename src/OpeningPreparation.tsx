@@ -3,7 +3,7 @@ import type { Card } from "../server/cards";
 import type { WorldItem } from "./Library";
 import type { Message } from "../server/context";
 import type { SessionOptions } from "../server/settings";
-import { type Preparation } from "../shared/preparation";
+import { preparationSchema, type Preparation } from "../shared/preparation";
 import { readPlayer } from "../shared/player";
 import { expand } from "../shared/character-text";
 export type PreparingSession = {
@@ -174,8 +174,9 @@ export function OpeningPreparation({
                 setDraft({
                   ...draft,
                   source: {
+                    ...draft.source,
                     name: draft.source?.name ?? "我的故事",
-                    format: "text",
+                    format: draft.source?.format ?? "text",
                     text: e.target.value,
                   },
                 })
@@ -183,15 +184,43 @@ export function OpeningPreparation({
             />
           </label>
           <label className="import">
-            导入文本设定（TXT / Markdown）
+            导入设定（Word / TXT / Markdown）
             <input
               type="file"
-              accept=".txt,.md"
+              accept=".docx,.txt,.md"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file) return;
                 void run(async () => {
+                  if (/\.doc$/i.test(file.name))
+                    throw new Error(
+                      "旧版 .doc 请在 Word 或 WPS 中另存为 .docx 后导入",
+                    );
+                  if (/\.docx$/i.test(file.name)) {
+                    if (file.size > 2 * 1024 * 1024)
+                      throw new Error("Word 文件上限 2 MB，请拆分或移除大图片");
+                    const response = await fetch(
+                      "/api/documents/word?name=" +
+                        encodeURIComponent(file.name),
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/octet-stream" },
+                        body: file,
+                      },
+                    );
+                    const result = await response.json();
+                    if (!response.ok)
+                      throw new Error(result.error ?? "Word 导入失败");
+                    const source = preparationSchema.shape.source.parse(result);
+                    setDraft({ ...draft, source });
+                    setNotice(
+                      "Word 文字已提取到设定框。请检查内容，保存准备后可继续；导入不会调用 AI。",
+                    );
+                    return;
+                  }
+                  if (!/\.(txt|md)$/i.test(file.name))
+                    throw new Error("请选择 DOCX、TXT 或 Markdown 文件");
                   if (file.size > 400000)
                     throw new Error("文本文件请限制在 400 KB 内");
                   const text = await file.text();
@@ -213,6 +242,16 @@ export function OpeningPreparation({
               }}
             />
           </label>
+          {draft.source?.warnings?.map((warning, i) => (
+            <p className="muted" key={i}>
+              {warning}
+            </p>
+          ))}
+          {draft.source?.documentId && (
+            <a href={`/api/documents/${draft.source.documentId}/original`}>
+              下载原始 Word 文档
+            </a>
+          )}
           <details
             open={
               draft.characterMode === "existing" ||
