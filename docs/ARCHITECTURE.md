@@ -44,3 +44,7 @@ Library.tsx 负责世界/角色分类、新建、导入、角色编辑和开局�
 ## 引导创建
 
 server/creation.ts 校验简单表单并映射到现有 V2 角色卡或 yuno_world_v1 世界书；在同一 SQLite 事务创建资源及可选会话，失败回滚。shared/player.ts 在 extensions.yunotavern.player 保存玩家称呼/背景，并合并保留其他扩展；运行时选择世界书的非空玩家设定，否则回退角色卡，作为单独系统上下文参与预算，{{user}} 使用该称呼。没有设定时保持旧行为。它不是完整 ST Persona 实现。CreationGuide.tsx 仅负责现有创建表单的渐进呈现，Library 保留完整编辑入口。
+
+## 开局准备增量
+
+开局数据流：session_options 中的准备草稿 → 现有角色/世界资源或简单资源 → 开场预览 → SQLite 事务确认 → 原回合链路。实现见 shared/preparation.ts、server/preparation.ts、src/OpeningPreparation.tsx。生成复用原 provider/context，不引入 Agent；准备状态与草稿不允许通过通用 options 接口绕过确认写入。完整说明见 OPENING-FLOW.md。

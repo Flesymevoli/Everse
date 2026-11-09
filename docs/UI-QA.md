@@ -19,3 +19,11 @@
 浏览器记录和截图保存在仓库外 D:/酒馆/ui-evidence/：responsive-qa.json、worldbook-fixed-1440.png、worldbook-fixed-375.png、worldbook-fixed-320.png、creation-guide-375.png、created-story-375.png。脚本 responsive-qa.ts 在同一目录，使用本机现有 Playwright 路径；不是跨机器 CI 配置。
 
 尚未覆盖真实手机软键盘、Safari/Firefox、真实付费供应商和全部高级预设组合。旧的浏览器验收阻碍记录仅是历史状态，本轮以上流程已完成浏览器验证。
+
+## 开局准备验收（同日后续）
+
+36 项测试、类型检查和生产构建通过。真实 Chromium 在 1440、375、320 像素宽度验证：新建空资源存档 → 手写背景/玩家身份/开场 → 保存准备 → 刷新从待开局恢复 → 确认 → 模拟互动 → 刷新恢复正文。均无横向溢出或页面运行异常，控件宽度分别为 780/327/272px。
+
+另实测 JSON 角色卡导入、选择备选开场、修改预览、确认后原卡不变；作品创建入口进入准备；375px 主动模拟生成仅发起一次请求，确认前不写入剧情。服务端测试覆盖停止/失败、旧 SQLite 重开、重复确认与旧剧情保护。测试全程隔离内存数据库及模拟模型，无真实付费请求。
+
+证据在仓库外 D:/酒馆/ui-evidence/：opening-qa.ts、opening-qa.json、opening-preparation-{1440,375,320}.png、opening-started-{1440,375,320}.png。上述新流程取代前文“创建并开始”的直接进入行为。真实供应商、手机软键盘及跨浏览器未测。

@@ -81,7 +81,7 @@ export function Library({
     setCardId(character);
     setWorldId(world);
     setError("");
-    setDialog("start");
+    void run(() => onStart(character, world));
   }
   function saveButtons(items: Save[]) {
     return items.map((s, i) => (
@@ -275,6 +275,12 @@ export function Library({
       <button disabled={locked} onClick={() => start()}>
         ＋ 新建存档
       </button>
+      {saves.some((s) => !s.cardId && !s.options?.worldId) && (
+        <section aria-label="待开局存档">
+          <h3>待开局</h3>
+          {saveButtons(saves.filter((s) => !s.cardId && !s.options?.worldId))}
+        </section>
+      )}
       {dialog &&
         createPortal(
           <div className="settings-backdrop">
@@ -332,6 +338,7 @@ export function Library({
                       },
                       ...(tab === "worlds" ? { worldbook: book } : {}),
                       start: startNow,
+                      prepare: true,
                     });
                     await onRefresh();
                     if (created.sessionId) await onCreated(created.sessionId);
@@ -526,7 +533,7 @@ export function Library({
                     }
                   >
                     {dialog === "create"
-                      ? "创建并开始"
+                      ? "创建并准备开局"
                       : dialog === "start"
                         ? "开始故事"
                         : tab === "worlds"

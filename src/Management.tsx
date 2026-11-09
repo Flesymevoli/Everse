@@ -78,9 +78,10 @@ export function Management({
     }
   }
   async function save(patch: SessionOptions) {
+    const { openingState: _state, openingDraft: _draft, ...editable } = patch;
     const updated = await request<SessionOptions>(
       "sessions/" + session + "/options",
-      patch,
+      editable,
     );
     setOptions(updated);
     await onUpdate(session);
