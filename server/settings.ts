@@ -4,6 +4,8 @@ import { z } from "zod";
 import { parametersSchema } from "./preset.js";
 export const optionsSchema = z
   .object({
+    storySource: preparationSchema.shape.source,
+    storyTracking: z.boolean().optional(),
     openingState: z.enum(["preparing", "started"]).optional(),
     openingDraft: preparationSchema.optional(),
     player: playerSchema.optional(),

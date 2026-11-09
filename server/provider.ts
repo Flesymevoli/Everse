@@ -8,6 +8,11 @@ export interface Config {
   parameters?: Parameters;
 }
 export class ModelRequestError extends Error {}
+export type Usage = {
+  input: number | null;
+  output: number | null;
+  cached: number | null;
+};
 export function generationError(error: unknown, cancelled = false): string {
   if (cancelled) return "已停止生成，本轮未保存。";
   if (error instanceof ModelRequestError) return error.message + "本轮未保存。";
@@ -20,6 +25,7 @@ export async function* generate(
   messages: Message[],
   maxTokens: number | undefined,
   signal?: AbortSignal,
+  onUsage?: (usage: Usage) => void,
 ): AsyncGenerator<string> {
   if (config.mock) {
     for (const part of ["【模拟回复】", "远处的灯亮了。", "你想走近看看吗？"]) {
@@ -29,6 +35,9 @@ export async function* generate(
     }
     if (messages.some((m) => m.content.includes("<action_suggestions>")))
       yield '\n<action_suggestions>["走近灯光，看看是谁在等候","留在原地，听一听海风里的声音"]</action_suggestions>';
+    if (messages.some((m) => m.content.includes("<story_update>")))
+      yield '\n<story_update>{"changes":[{"key":"scene:灯光","kind":"scene","value":"远处有灯光","evidence":"远处的灯亮了。"}]}</story_update>';
+    onUsage?.({ input: 0, output: 0, cached: 0 });
     return;
   }
   const url = new URL(config.baseUrl.replace(/\/$/, "") + "/chat/completions");
@@ -93,7 +102,25 @@ export async function* generate(
       const value = JSON.parse(data) as {
         choices?: { delta?: { content?: unknown }; finish_reason?: string }[];
         error?: unknown;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          prompt_cache_hit_tokens?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+        };
       };
+      if (value.usage) {
+        const valid = (n: unknown) =>
+          typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? n : null;
+        onUsage?.({
+          input: valid(value.usage.prompt_tokens),
+          output: valid(value.usage.completion_tokens),
+          cached: valid(
+            value.usage.prompt_tokens_details?.cached_tokens ??
+              value.usage.prompt_cache_hit_tokens,
+          ),
+        });
+      }
       if (value.error) throw new Error("模型返回错误");
       const choice = value.choices?.[0];
       if (choice?.finish_reason === "length")

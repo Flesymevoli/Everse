@@ -47,14 +47,16 @@ export function importWorld(raw: unknown, name = "导入的世界书") {
 export function combinedCard(
   card: Card | undefined,
   world: World | undefined,
+  source?: { name: string; text: string },
 ): Card {
-  if (!card && !world) throw new Error("请选择世界书或角色卡");
+  if (!card && !world && !source?.text.trim())
+    throw new Error("请写下故事设定，或选择已有角色卡/世界书");
   return (
     card ??
     cardSchema.parse({
       spec: "chara_card_v2",
       spec_version: "2.0",
-      data: { name: world!.data.name },
+      data: { name: world?.data.name || source?.name || "未命名故事" },
     })
   );
 }

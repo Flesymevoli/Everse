@@ -2,10 +2,17 @@ import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import type { Card } from "./cards.js";
 import type { Message } from "./context.js";
+import { historyKey, readStory } from "./story.js";
+import type { Correction } from "../shared/story.js";
 export class Store {
   db: DatabaseSync;
   constructor(path: string) {
     this.db = new DatabaseSync(path);
+    this.db
+      .exec(`CREATE TABLE IF NOT EXISTS story_corrections(id INTEGER PRIMARY KEY, sessionId TEXT NOT NULL, anchor TEXT NOT NULL, count INTEGER NOT NULL, key TEXT NOT NULL, value TEXT);
+      CREATE TABLE IF NOT EXISTS turn_drafts(sessionId TEXT PRIMARY KEY, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS model_usage(id INTEGER PRIMARY KEY, sessionId TEXT NOT NULL, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS turn_receipts(sessionId TEXT NOT NULL, requestId TEXT NOT NULL, PRIMARY KEY(sessionId,requestId));`);
     this.db.exec(
       "CREATE TABLE IF NOT EXISTS assets(id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS session_options(id TEXT PRIMARY KEY, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS revisions(id INTEGER PRIMARY KEY, sessionId TEXT NOT NULL, messages TEXT NOT NULL);",
     );
@@ -233,5 +240,65 @@ export class Store {
   }
   close() {
     this.db.close();
+  }
+  corrections(id: string): Correction[] {
+    return this.db
+      .prepare(
+        "SELECT id,anchor,count,key,value FROM story_corrections WHERE sessionId=? ORDER BY id",
+      )
+      .all(id) as unknown as Correction[];
+  }
+  story(id: string) {
+    return readStory(this.session(id).messages, this.corrections(id));
+  }
+  correct(id: string, revision: string, key: string, value: string | null) {
+    const messages = this.session(id).messages;
+    if (this.story(id).revision !== revision)
+      throw new Error("剧情或修正已变化，请刷新后再修正");
+    if (!this.story(id).facts.some((f) => f.key === key))
+      throw new Error("事实不存在");
+    this.db
+      .prepare(
+        "INSERT INTO story_corrections(sessionId,anchor,count,key,value) VALUES (?,?,?,?,?)",
+      )
+      .run(id, historyKey(messages), messages.length, key, value);
+  }
+  copyCorrections(from: string, to: string) {
+    this.db
+      .prepare(
+        "INSERT INTO story_corrections(sessionId,anchor,count,key,value) SELECT ?,anchor,count,key,value FROM story_corrections WHERE sessionId=?",
+      )
+      .run(to, from);
+  }
+  draft(
+    id: string,
+  ): { raw: string; input: string; base: string; error: string } | null {
+    const row = this.db
+      .prepare("SELECT body FROM turn_drafts WHERE sessionId=?")
+      .get(id);
+    return row ? JSON.parse(String(row.body)) : null;
+  }
+  saveDraft(id: string, value: NonNullable<ReturnType<Store["draft"]>>) {
+    this.db
+      .prepare(
+        "INSERT INTO turn_drafts VALUES (?,?) ON CONFLICT(sessionId) DO UPDATE SET body=excluded.body",
+      )
+      .run(id, JSON.stringify(value));
+  }
+  commitTurn(id: string, base: string, messages: Message[], requestId: string) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (historyKey(this.session(id).messages) !== base)
+        throw new Error("剧情已变化，本轮未覆盖存档");
+      this.db
+        .prepare("INSERT INTO turn_receipts VALUES (?,?)")
+        .run(id, requestId);
+      this.save(id, messages);
+      this.db.prepare("DELETE FROM turn_drafts WHERE sessionId=?").run(id);
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
   }
 }

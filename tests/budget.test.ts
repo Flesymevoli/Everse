@@ -61,7 +61,7 @@ test("长设定开场真实 HTTP：自动省略输出限制，手动及预设大
     }
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     res.end(
-      'data: {"choices":[{"delta":{"content":"开场成功"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      'data: {"choices":[{"delta":{"content":"开场成功<story_update>{\\"changes\\":[]}</story_update>"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
     );
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));

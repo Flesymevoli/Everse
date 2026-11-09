@@ -6,6 +6,14 @@ const simple = z.object({
 });
 export const preparationSchema = z
   .object({
+    source: z
+      .object({
+        name: z.string().max(100),
+        format: z.enum(["text", "txt", "md"]),
+        text: z.string().max(100000),
+      })
+      .strict()
+      .optional(),
     characterMode: z.enum(["existing", "simple", "none"]),
     worldMode: z.enum(["existing", "simple", "none"]),
     cardId: z.string().default(""),

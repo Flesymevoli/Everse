@@ -6,6 +6,7 @@ import { buildContext } from "./context.js";
 import { presetSchema, importPreset, parametersSchema } from "./preset.js";
 import type { Config } from "./provider.js";
 import { resolveBudget } from "./budget.js";
+import { parseStory, storyInstruction } from "./story.js";
 export function ensurePreparation(store: Store, id: string) {
   const s = store.session(id);
   if (s.options.archived) throw new Error("请先恢复归档存档");
@@ -55,6 +56,7 @@ export function preparationResources(store: Store, d: Preparation) {
   const card = combinedCard(
     newCard?.card ?? selectedCard?.card,
     newWorld?.world ?? selectedWorld?.world,
+    d.source,
   );
   const world = newWorld?.world ?? selectedWorld?.world;
   const preset = store.assets("presets").find((v) => v.id === d.presetId),
@@ -79,6 +81,20 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
   if (!d.opening.trim())
     throw new Error("请先选择、编写或生成开场剧情，再确认开始");
   const r = preparationResources(store, d);
+  const generated = store.draft(id);
+  let openingStory;
+  if (generated?.raw) {
+    try {
+      const parsed = parseStory(generated.raw, []);
+      if (
+        parsed.text === d.opening &&
+        expand(d.opening, r.card.data.name, d.player.name) === d.opening
+      )
+        openingStory = parsed.story;
+    } catch {
+      /* Manual opening is valid without generated state. */
+    }
+  }
   store.db.exec("BEGIN IMMEDIATE");
   try {
     const cardId = r.newCard
@@ -98,6 +114,7 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
           role: "assistant",
           content: expand(d.opening, r.card.data.name, d.player.name),
           raw: d.opening,
+          story: openingStory,
         },
       ]),
       id,
@@ -110,7 +127,11 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       openingDraft: undefined,
       presetId: d.presetId,
       worldbookId: d.worldbookId,
+      storySource: d.source,
+      storyTracking: true,
+      name: s.options.name ?? d.source?.name,
     });
+    store.db.prepare("DELETE FROM turn_drafts WHERE sessionId=?").run(id);
     store.db.exec("COMMIT");
     return store.session(id);
   } catch (e) {
@@ -146,13 +167,17 @@ export function openingRequest(
       ...s.options,
       automaticBudget: limits.automaticBudget,
       player: d.player,
-      worldDescription: r.world?.data.description,
+      worldDescription: [d.source?.text, r.world?.data.description]
+        .filter(Boolean)
+        .join("\n\n"),
       cardWorldbook: r.world?.data.worldbook,
       worldbook: r.book?.original,
       preset: r.preset?.original,
       extraInstruction:
-        "本次仅生成可供玩家预览的开场正文，不输出说明、选项或玩家后续行动。已有草稿仅作参考：\n" +
-        d.opening,
+        "本次生成可供玩家预览的开场，尊重作者设定；未指定玩家身份时留出自由参与空间，不替玩家决定后续行动。已有草稿仅作参考：\n" +
+        d.opening +
+        "\n" +
+        storyInstruction,
     },
   );
   return {

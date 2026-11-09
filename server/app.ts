@@ -4,6 +4,16 @@ import {
   openingRequest,
   ensurePreparation,
 } from "./preparation.js";
+import { randomUUID } from "node:crypto";
+import {
+  historyKey,
+  parseStory,
+  readStory,
+  storyContext,
+  storyInstruction,
+  StoryFormatError,
+} from "./story.js";
+import type { Usage } from "./provider.js";
 import { preparationSchema } from "../shared/preparation.js";
 import { validationMessage } from "./validation.js";
 import { tokenLimit, resolveBudget } from "./budget.js";
@@ -34,6 +44,7 @@ import {
   activeVariant,
 } from "../shared/swipes.js";
 const turn = z.object({
+  requestId: z.string().uuid().optional(),
   mode: z.enum(["send", "regenerate"]).default("send"),
   input: z.string().trim().max(20000).default(""),
   budget: tokenLimit.optional(),
@@ -117,31 +128,66 @@ export function createApp(
     busy.add(id);
     const controller = new AbortController();
     controllers.set(id, controller);
+    let opening = "";
+    let usage: Usage | null = null;
+    let status = "failed";
+    const started = Date.now();
     try {
-      let opening = "";
       for await (const part of generate(
         request.config,
         request.prompt.messages,
         request.maxTokens,
         controller.signal,
+        (value) => {
+          usage = value;
+        },
       )) {
         opening += part;
         if (opening.length > 100000) throw new Error("开场过长");
       }
       controller.signal.throwIfAborted();
       if (!opening.trim()) throw new Error("空开场");
-      savePreparation(store, id, { ...body.draft, opening });
-      return c.json({ opening, prompt: request.prompt });
+      const parsed = parseStory(opening, []);
+      store.saveDraft(id, {
+        raw: opening,
+        input: "",
+        base: historyKey([]),
+        error: "",
+      });
+      savePreparation(store, id, { ...body.draft, opening: parsed.text });
+      status = "completed";
+      return c.json({ opening: parsed.text, prompt: request.prompt });
     } catch (error) {
+      store.saveDraft(id, {
+        raw: opening,
+        input: "",
+        base: historyKey([]),
+        error: "开场未完成或状态校验失败",
+      });
       return c.json(
         {
           error:
-            generationError(error, controller.signal.aborted) +
+            (error instanceof StoryFormatError
+              ? error.message
+              : generationError(error, controller.signal.aborted)) +
             "原草稿已保留。",
         },
         400,
       );
     } finally {
+      store.db
+        .prepare("INSERT INTO model_usage(sessionId,body) VALUES (?,?)")
+        .run(
+          id,
+          JSON.stringify({
+            purpose: "opening",
+            model: body.config.model,
+            mock: body.config.mock,
+            usage,
+            status,
+            elapsedMs: Date.now() - started,
+          }),
+        );
       busy.delete(id);
       controllers.delete(id);
     }
@@ -252,7 +298,11 @@ export function createApp(
       )
         throw new Error("绑定资源不存在");
     }
-    if (!store.session(id).cardId && options.worldId === null)
+    if (
+      !store.session(id).cardId &&
+      !store.options(id).storySource?.text &&
+      options.worldId === null
+    )
       throw new Error("纯世界存档必须保留世界书");
     store.setOptions(id, { ...store.options(id), ...options });
     return c.json(store.options(id));
@@ -308,12 +358,18 @@ export function createApp(
       ...session.messages[body.index],
       content: body.content,
       suggestions: [],
+      story: undefined,
     };
     const edited = session.messages[body.index];
     if (edited.role === "assistant" && (edited.variants || edited.st?.swipes)) {
       const variants = variantsOf(edited).map((variant, i) =>
         i === activeVariant(edited)
-          ? { ...variant, content: body.content, suggestions: [] }
+          ? {
+              ...variant,
+              content: body.content,
+              suggestions: [],
+              story: undefined,
+            }
           : variant,
       );
       session.messages[body.index] = selectVariant(
@@ -348,6 +404,7 @@ export function createApp(
       archived: false,
     });
     store.setSuggestions(id, session.suggestions);
+    store.copyCorrections(session.id, id);
     return c.json({ id });
   });
   app.post("/api/cards", async (c) => {
@@ -445,7 +502,41 @@ export function createApp(
       });
     return c.json({ id });
   });
-  app.get("/api/sessions/:id", (c) => c.json(store.session(c.req.param("id"))));
+  app.get("/api/sessions/:id", (c) => {
+    const id = c.req.param("id");
+    return c.json({
+      ...store.session(id),
+      story: store.story(id),
+      draft: store.draft(id),
+    });
+  });
+  app.get("/api/sessions/:id/story", (c) =>
+    c.json(store.story(c.req.param("id"))),
+  );
+  app.post("/api/sessions/:id/story/correct", async (c) => {
+    const id = c.req.param("id");
+    const body = z
+      .object({
+        revision: z.string().length(64),
+        key: z.string().min(1).max(80),
+        value: z.string().trim().min(1).max(600).nullable(),
+      })
+      .strict()
+      .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    store.correct(id, body.revision, body.key, body.value);
+    return c.json(store.story(id));
+  });
+  app.get("/api/sessions/:id/usage", (c) => {
+    const id = c.req.param("id");
+    store.session(id);
+    return c.json(
+      store.db
+        .prepare("SELECT body FROM model_usage WHERE sessionId=? ORDER BY id")
+        .all(id)
+        .map((row) => JSON.parse(String(row.body))),
+    );
+  });
   app.post("/api/sessions/:id/greeting", async (c) => {
     const id = c.req.param("id");
     const { index } = z
@@ -504,6 +595,17 @@ export function createApp(
     const id = c.req.param("id");
     if (busy.has(id)) return c.json({ error: "该存档正在生成" }, 409);
     const body = turn.parse(await c.req.json());
+    const requestId = body.requestId ?? randomUUID();
+    if (
+      store.db
+        .prepare(
+          "SELECT 1 FROM turn_receipts WHERE sessionId=? AND requestId=?",
+        )
+        .get(id, requestId)
+    ) {
+      c.header("Content-Type", "application/x-ndjson");
+      return c.body(JSON.stringify({ type: "done", replay: true }) + "\n");
+    }
     if (body.connectionId && !body.config.mock)
       body.config = await vault.config(body.connectionId);
     const session = store.session(id);
@@ -513,7 +615,11 @@ export function createApp(
     const worldCard = store
       .worlds()
       .find((w) => w.id === session.options.worldId);
-    const runtimeCard = combinedCard(item?.card, worldCard?.world);
+    const runtimeCard = combinedCard(
+      item?.card,
+      worldCard?.world,
+      session.options.storySource,
+    );
     if (session.options.archived) throw new Error("请先恢复归档的聊天");
     const worldbook = store
       .assets("worldbooks")
@@ -546,19 +652,43 @@ export function createApp(
       input = history.at(-2)!.content;
       history = history.slice(0, -2);
     } else if (!input) throw new Error("请输入内容");
+    const tracking = session.options.storyTracking === true;
+    const memory = tracking
+      ? storyContext(
+          readStory(history, store.corrections(id)),
+          input,
+          history,
+          Math.min(6000, Math.max(512, Math.floor(budget / 3))),
+        )
+      : { text: "", selected: [], omitted: 0, bytes: 0 };
+    const base = historyKey(session.messages);
     const prompt = buildContext(runtimeCard, history, input, budget, reserve, {
       player:
         session.options.player ??
         readPlayer(worldCard?.world.data) ??
         readPlayer(runtimeCard.data),
-      worldDescription: worldCard?.world.data.description,
+      worldDescription: [
+        session.options.storySource?.text,
+        worldCard?.world.data.description,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
       cardWorldbook: worldCard?.world.data.worldbook,
       worldbook: worldbook?.original,
       preset: presetAsset?.original,
       ...session.options,
       automaticBudget: limits.automaticBudget,
       scanDepth: session.options.scanDepth,
-      extraInstruction: session.suggestions ? suggestionInstruction : undefined,
+      extraInstruction: [
+        session.suggestions
+          ? tracking
+            ? suggestionInstruction.replace("在末尾", "在故事状态标签之前")
+            : suggestionInstruction
+          : "",
+        tracking ? memory.text + "\n" + storyInstruction : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     });
     // Recheck after the asynchronous body read before acquiring the turn.
     if (busy.has(id)) return c.json({ error: "该存档正在生成" }, 409);
@@ -568,6 +698,11 @@ export function createApp(
     c.header("Content-Type", "application/x-ndjson");
     return stream(c, async (s) => {
       s.onAbort(() => controller.abort());
+      let reply = "";
+      let usage: Usage | null = null;
+      let status = "failed";
+      const started = Date.now();
+      let lastCheckpoint = 0;
       try {
         await s.write(
           JSON.stringify({
@@ -578,33 +713,50 @@ export function createApp(
               budgetSource: limits.budgetSource,
               outputSource: limits.outputSource,
               maxTokens: limits.maxTokens ?? null,
+              memory: tracking ? memory : null,
             },
           }) + "\n",
         );
-        let reply = "";
         for await (const text of generate(
           { ...body.config, parameters },
           prompt.messages,
           limits.maxTokens,
           controller.signal,
+          (value) => {
+            usage = value;
+          },
         )) {
           reply += text;
           if (reply.length > 100000) throw new Error("回复过长");
+          if (Date.now() - lastCheckpoint >= 500) {
+            store.saveDraft(id, {
+              raw: reply,
+              input,
+              base,
+              error: "生成中断时可从此草稿取回正文；尚未提交",
+            });
+            lastCheckpoint = Date.now();
+          }
           await s.write(JSON.stringify({ type: "delta", text }) + "\n");
         }
         if (!reply.trim()) throw new Error("模型返回空回复");
         controller.signal.throwIfAborted();
+        const narrative = tracking
+          ? parseStory(reply, [...history, { role: "user", content: input }])
+          : { text: reply, story: undefined };
         const parsed = session.suggestions
-          ? parseSuggestions(reply)
-          : { text: reply, suggestions: [] };
+          ? parseSuggestions(narrative.text)
+          : { text: narrative.text, suggestions: [] };
         const replyMessage = {
           role: "assistant" as const,
           content: parsed.text,
           suggestions: parsed.suggestions,
           raw: reply,
+          story: narrative.story,
         };
-        store.save(
+        store.commitTurn(
           id,
+          base,
           body.mode === "regenerate"
             ? [
                 ...session.messages.slice(0, -1),
@@ -615,16 +767,41 @@ export function createApp(
                 { role: "user", content: input },
                 replyMessage,
               ],
+          requestId,
         );
+        status = "completed";
         await s.write(JSON.stringify({ type: "done" }) + "\n");
       } catch (error) {
+        if (status === "completed") return; // Transport failed after commit; never resurrect a committed draft.
+        store.saveDraft(id, {
+          raw: reply,
+          input,
+          base,
+          error: "生成或状态校验未完成，原剧情保持不变",
+        });
         await s.write(
           JSON.stringify({
             type: "error",
-            error: generationError(error, controller.signal.aborted),
+            error:
+              error instanceof StoryFormatError
+                ? error.message
+                : generationError(error, controller.signal.aborted),
           }) + "\n",
         );
       } finally {
+        store.db
+          .prepare("INSERT INTO model_usage(sessionId,body) VALUES (?,?)")
+          .run(
+            id,
+            JSON.stringify({
+              purpose: body.mode,
+              model: body.config.model,
+              mock: body.config.mock,
+              usage,
+              status,
+              elapsedMs: Date.now() - started,
+            }),
+          );
         busy.delete(id);
         controllers.delete(id);
       }
