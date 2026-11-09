@@ -9,6 +9,10 @@
   --line: #e8e3da;
   --selection: #eae1d6;
   --panel: #f6f3ed;
+  --sage: #50664f;
+  --sage-soft: #e4e9df;
+  --sage-hover: #d9e1d3;
+  --surface: #fffcf7;
 }
 html {
   scrollbar-color: #c9bbae transparent;
@@ -123,7 +127,7 @@ html {
   width: 100%;
   min-width: 0;
   text-align: left;
-  background: #e8ded2;
+  background: #ebe7df;
   border-radius: 11px;
   padding: 10px;
   margin: 6px 0;
@@ -152,9 +156,9 @@ html {
   width: 34px;
   height: 42px;
   flex: none;
-  background: #d9c9b8;
+  background: var(--sage-soft);
   border-radius: 6px;
-  color: #6b5545;
+  color: var(--sage);
   font-family: var(--font-app);
 }
 .story-cover.small {
@@ -198,8 +202,9 @@ html {
   padding: 6px 8px;
 }
 .tree-saves .shelf-item[aria-pressed="true"] {
-  background: var(--selection);
-  box-shadow: inset 3px 0 var(--accent);
+  background: var(--sage-soft);
+  color: var(--sage);
+  box-shadow: inset 3px 0 var(--sage);
 }
 .tree-action {
   display: flex;
@@ -289,3 +294,16 @@ html {
     min-height: 44px;
   }
 }
+
+/* Sage identifies the story and its state; terracotta remains the writing accent. */
+.recent-story:hover { background: var(--selection); }
+.story-tree-group > summary:hover { background: #ebe7df; border-radius: 8px; }
+.story-tree-group[open] > summary { color: var(--sage); }
+.tree-saves .shelf-item[aria-pressed="true"]:hover { background: var(--sage-hover); }
+.story-panel .panel-heading .eyebrow, .dynamic-character h2 { color: var(--sage); }
+.story-monogram { background: var(--sage-soft); color: var(--sage); }
+.story-panel > button[role="switch"][aria-checked="true"] { background: var(--sage-soft); color: var(--sage); }
+.world-note button:not(:disabled) { color: var(--sage); }
+.world-note button:not(:disabled):hover { background: var(--sage-soft); }
+.composer { background: var(--surface); border-color: var(--line); box-shadow: 0 3px 16px #30291f05; }
+.topbar { border-bottom-color: transparent; }
