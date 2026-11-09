@@ -14,6 +14,7 @@ export const creationSchema = z
     personality: z.string().max(100000).default(""),
     scenario: z.string().max(100000).default(""),
     worldbook: z.unknown().optional(),
+    prepare: z.boolean().default(false),
     start: z.boolean().default(true),
   })
   .strict();
@@ -53,7 +54,10 @@ export function createWork(store: Store, raw: unknown) {
             ]
           : [],
       );
-      if (body.kind === "worlds") store.setOptions(sessionId, { worldId: id });
+      store.setOptions(sessionId, {
+        ...(body.kind === "worlds" ? { worldId: id } : {}),
+        ...(body.prepare ? { openingState: "preparing" as const } : {}),
+      });
     }
     store.db.exec("COMMIT");
     return { id, sessionId };

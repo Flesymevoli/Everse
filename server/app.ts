@@ -1,3 +1,11 @@
+import {
+  savePreparation,
+  confirmPreparation,
+  openingRequest,
+  ensurePreparation,
+} from "./preparation.js";
+import { preparationSchema } from "../shared/preparation.js";
+import { validationMessage } from "./validation.js";
 import { createWork } from "./creation.js";
 import { readPlayer, withPlayer, playerSchema } from "../shared/player.js";
 import { editWorld } from "./world-edit.js";
@@ -69,10 +77,72 @@ export function createApp(
   });
   app.onError((e, c) =>
     c.json(
-      { error: e instanceof z.ZodError ? "输入格式不正确" : e.message },
+      { error: e instanceof z.ZodError ? validationMessage(e) : e.message },
       400,
     ),
   );
+  app.post("/api/sessions/:id/preparation", async (c) => {
+    const body = await c.req.json(),
+      id = c.req.param("id");
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    return c.json(savePreparation(store, id, body));
+  });
+  app.post("/api/sessions/:id/start", async (c) => {
+    const body = await c.req.json(),
+      id = c.req.param("id");
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    return c.json(confirmPreparation(store, id, body));
+  });
+  app.post("/api/sessions/:id/opening", async (c) => {
+    const body = turn
+        .pick({ config: true, connectionId: true, budget: true, reserve: true })
+        .extend({ draft: preparationSchema })
+        .parse(await c.req.json()),
+      id = c.req.param("id");
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    ensurePreparation(store, id);
+    if (body.connectionId && !body.config.mock)
+      body.config = await vault.config(body.connectionId);
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    const request = openingRequest(
+      store,
+      id,
+      body.draft,
+      body.config,
+      body.budget,
+      body.reserve,
+    );
+    savePreparation(store, id, body.draft);
+    busy.add(id);
+    const controller = new AbortController();
+    controllers.set(id, controller);
+    try {
+      let opening = "";
+      for await (const part of generate(
+        request.config,
+        request.prompt.messages,
+        request.prompt.reserve,
+        controller.signal,
+      )) {
+        opening += part;
+        if (opening.length > 100000) throw new Error("开场过长");
+      }
+      controller.signal.throwIfAborted();
+      if (!opening.trim()) throw new Error("空开场");
+      savePreparation(store, id, { ...body.draft, opening });
+      return c.json({ opening, prompt: request.prompt });
+    } catch {
+      return c.json(
+        {
+          error: "开场生成未完成，原草稿已保留。请检查模型配置或稍后手动重试。",
+        },
+        400,
+      );
+    } finally {
+      busy.delete(id);
+      controllers.delete(id);
+    }
+  });
   app.get("/api/connections", (c) => c.json(vault.list()));
   app.post("/api/connections", async (c) =>
     c.json(await vault.save(await c.req.json())),
@@ -164,7 +234,9 @@ export function createApp(
   }
   app.post("/api/sessions/:id/options", async (c) => {
     const id = c.req.param("id");
-    const options = optionsSchema.parse(await c.req.json());
+    const options = optionsSchema
+      .omit({ openingState: true, openingDraft: true })
+      .parse(await c.req.json());
     if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
     for (const [key, kind] of [
       ["worldId", "worlds"],
@@ -330,16 +402,22 @@ export function createApp(
   });
   app.get("/api/sessions", (c) => c.json(store.sessions()));
   app.post("/api/sessions", async (c) => {
-    const { cardId, worldId } = z
+    const { cardId, worldId, prepare } = z
       .object({
         cardId: z.string().default(""),
         worldId: z.string().optional(),
+        prepare: z.boolean().default(false),
       })
       .parse(await c.req.json());
     const item = store.cards().find((x) => x.id === cardId);
     const world = store.worlds().find((x) => x.id === worldId);
     if (cardId && !item) throw new Error("角色卡不存在");
     if (worldId && !world) throw new Error("世界书不存在");
+    if (prepare && !item && !world) {
+      const id = store.create("", []);
+      store.setOptions(id, { openingState: "preparing" });
+      return c.json({ id });
+    }
     const card = combinedCard(item?.card, world?.world);
     const opening = world?.world.data.first_mes || card.data.first_mes;
     const id = store.create(
@@ -357,7 +435,11 @@ export function createApp(
           ]
         : [],
     );
-    if (worldId) store.setOptions(id, { worldId });
+    if (worldId || prepare)
+      store.setOptions(id, {
+        ...(worldId ? { worldId } : {}),
+        ...(prepare ? { openingState: "preparing" as const } : {}),
+      });
     return c.json({ id });
   });
   app.get("/api/sessions/:id", (c) => c.json(store.session(c.req.param("id"))));
@@ -375,6 +457,8 @@ export function createApp(
       return c.json({ error: "已有剧情，不能再替换开场；请新建存档" }, 409);
     const item = store.cards().find((x) => x.id === session.cardId);
     if (!item) throw new Error("作品不存在");
+    if (session.options.openingState === "started")
+      throw new Error("开场已确认，请新建存档选择其他开场");
     const options = greetings(item.card, readPlayer(item.card.data)?.name);
     if (index >= options.length) return c.json({ error: "开场不存在" }, 400);
     store.save(
@@ -420,6 +504,8 @@ export function createApp(
     if (body.connectionId && !body.config.mock)
       body.config = await vault.config(body.connectionId);
     const session = store.session(id);
+    if (session.options.openingState === "preparing")
+      throw new Error("请先完成开局准备并确认开始");
     const item = store.cards().find((x) => x.id === session.cardId);
     const worldCard = store
       .worlds()
@@ -458,7 +544,10 @@ export function createApp(
       history = history.slice(0, -2);
     } else if (!input) throw new Error("请输入内容");
     const prompt = buildContext(runtimeCard, history, input, budget, reserve, {
-      player: readPlayer(worldCard?.world.data) ?? readPlayer(runtimeCard.data),
+      player:
+        session.options.player ??
+        readPlayer(worldCard?.world.data) ??
+        readPlayer(runtimeCard.data),
       worldDescription: worldCard?.world.data.description,
       cardWorldbook: worldCard?.world.data.worldbook,
       worldbook: worldbook?.original,
