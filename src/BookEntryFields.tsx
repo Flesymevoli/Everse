@@ -27,6 +27,7 @@ export function BookEntryFields({
           <label>
             关键词
             <textarea
+              className="keyword-input"
               value={Array.isArray(entry.key) ? entry.key.join("\n") : ""}
               onChange={(e) => update(id, { key: e.target.value.split("\n") })}
             />
