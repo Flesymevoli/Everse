@@ -2,13 +2,25 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { stream } from "hono/streaming";
 import { z } from "zod";
-import { importCard, expand } from "./cards.js";
+import { importCard, expand, greetings } from "./cards.js";
 import { buildContext } from "./context.js";
 import { parseSuggestions, suggestionInstruction } from "./suggestions.js";
 import { generate } from "./provider.js";
 import type { Store } from "./store.js";
+import { readPngCard } from "./png-card.js";
+import { importBook } from "./worldbook.js";
+import { importPreset, presetSchema, parametersSchema } from "./preset.js";
+import { optionsSchema } from "./settings.js";
+import { importChat, exportChat } from "./chat-files.js";
+import {
+  selectVariant,
+  appendVariant,
+  variantsOf,
+  activeVariant,
+} from "../shared/swipes.js";
 const turn = z.object({
-  input: z.string().trim().min(1).max(20000),
+  mode: z.enum(["send", "regenerate"]).default("send"),
+  input: z.string().trim().max(20000).default(""),
   budget: z.number().int().min(2048).max(128000).default(8192),
   reserve: z.number().int().min(64).max(8192).default(1024),
   config: z.object({
@@ -16,6 +28,7 @@ const turn = z.object({
     apiKey: z.string().max(4096),
     model: z.string().min(1),
     mock: z.boolean(),
+    parameters: parametersSchema.optional(),
   }),
 });
 export function createApp(store: Store) {
@@ -39,9 +52,161 @@ export function createApp(store: Store) {
     ),
   );
   app.get("/api/cards", (c) => c.json(store.cards()));
+  for (const kind of ["worldbooks", "presets"] as const) {
+    app.get("/api/" + kind, (c) => c.json(store.assets(kind)));
+    app.post("/api/" + kind, async (c) => {
+      const body = z
+        .object({
+          name: z.string().trim().min(1).max(100),
+          original: z.unknown(),
+        })
+        .parse(await c.req.json());
+      const asset =
+        kind === "worldbooks"
+          ? importBook(body.original)
+          : importPreset(body.original);
+      return c.json({
+        id: store.addAsset(kind, body.name, asset),
+        name: body.name,
+        ...asset,
+      });
+    });
+    app.get("/api/" + kind + "/:id/export", (c) => {
+      const asset = store
+        .assets(kind)
+        .find((asset) => asset.id === c.req.param("id"));
+      if (!asset) return c.json({ error: "资源不存在" }, 404);
+      c.header("Content-Disposition", 'attachment; filename="asset.json"');
+      return c.json(asset.original);
+    });
+  }
+  app.post("/api/sessions/:id/options", async (c) => {
+    const id = c.req.param("id");
+    const options = optionsSchema.parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    for (const [key, kind] of [
+      ["worldbookId", "worldbooks"],
+      ["presetId", "presets"],
+    ] as const) {
+      if (
+        options[key] &&
+        !store.assets(kind).some((asset) => asset.id === options[key])
+      )
+        throw new Error("绑定资源不存在");
+    }
+    store.setOptions(id, { ...store.options(id), ...options });
+    return c.json(store.options(id));
+  });
+  app.post("/api/sessions/import", async (c) => {
+    const body = z
+      .object({
+        cardId: z.string(),
+        text: z.string(),
+        name: z.string().min(1).max(100),
+      })
+      .parse(await c.req.json());
+    if (!store.cards().some((card) => card.id === body.cardId))
+      throw new Error("作品不存在");
+    const chat = importChat(body.text);
+    const id = store.create(body.cardId, chat.messages);
+    store.setOptions(id, { name: body.name, chatHeader: chat.header });
+    return c.json({ id });
+  });
+  app.get("/api/sessions/:id/export", (c) => {
+    const session = store.session(c.req.param("id"));
+    const card = store.cards().find((card) => card.id === session.cardId);
+    c.header("Content-Disposition", 'attachment; filename="chat.jsonl"');
+    return c.text(
+      exportChat(
+        session.messages,
+        session.options.chatHeader ?? {
+          user_name: "玩家",
+          character_name: card?.card.data.name ?? "",
+          chat_metadata: {},
+        },
+        card?.card.data.name ?? "",
+      ),
+    );
+  });
+  app.post("/api/sessions/:id/edit", async (c) => {
+    const id = c.req.param("id");
+    const body = z
+      .object({
+        index: z.number().int().min(0),
+        content: z.string().max(100000),
+      })
+      .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    const session = store.session(id);
+    if (!session.messages[body.index]) throw new Error("消息不存在");
+    session.messages[body.index] = {
+      ...session.messages[body.index],
+      content: body.content,
+      suggestions: [],
+    };
+    const edited = session.messages[body.index];
+    if (edited.role === "assistant" && (edited.variants || edited.st?.swipes)) {
+      const variants = variantsOf(edited).map((variant, i) =>
+        i === activeVariant(edited)
+          ? { ...variant, content: body.content, suggestions: [] }
+          : variant,
+      );
+      session.messages[body.index] = selectVariant(
+        { ...edited, variants },
+        activeVariant(edited),
+      );
+    }
+    store.edit(id, session.messages);
+    return c.json(store.session(id));
+  });
+  app.post("/api/sessions/:id/undo", (c) => {
+    const id = c.req.param("id");
+    if (busy.has(id)) return c.json({ error: "请等待生成结束" }, 409);
+    store.undo(id);
+    return c.json(store.session(id));
+  });
+  app.post("/api/sessions/:id/branch", async (c) => {
+    const body = z
+      .object({ count: z.number().int().min(0) })
+      .parse(await c.req.json());
+    const session = store.session(c.req.param("id"));
+    if (busy.has(session.id)) return c.json({ error: "请等待生成结束" }, 409);
+    if (body.count > session.messages.length)
+      throw new Error("分支位置超出范围");
+    const id = store.create(
+      session.cardId,
+      session.messages.slice(0, body.count),
+    );
+    store.setOptions(id, {
+      ...session.options,
+      name: (session.options.name ?? "存档") + " 分支",
+      archived: false,
+    });
+    store.setSuggestions(id, session.suggestions);
+    return c.json({ id });
+  });
   app.post("/api/cards", async (c) => {
-    const result = importCard(await c.req.json());
+    const png = c.req.header("content-type")?.split(";")[0] === "image/png";
+    const result = importCard(
+      png
+        ? readPngCard(Buffer.from(await c.req.arrayBuffer()))
+        : await c.req.json(),
+    );
+    if (png)
+      result.warnings.push(
+        "PNG 已提取角色数据；头像像素暂不保存，导出为 JSON，不是 PNG",
+      );
     return c.json({ id: store.addCard(result), ...result });
+  });
+  app.get("/api/cards/:id/export", (c) => {
+    const item = store.cards().find((x) => x.id === c.req.param("id"));
+    if (!item) return c.json({ error: "作品不存在" }, 404);
+    c.header("Content-Disposition", 'attachment; filename="character.json"');
+    c.header(
+      "X-Card-Export",
+      item.original === undefined ? "stored-fallback" : "original",
+    );
+    return c.json(item.original ?? item.card);
   });
   app.get("/api/sessions", (c) => c.json(store.sessions()));
   app.post("/api/sessions", async (c) => {
@@ -65,6 +230,28 @@ export function createApp(store: Store) {
     });
   });
   app.get("/api/sessions/:id", (c) => c.json(store.session(c.req.param("id"))));
+  app.post("/api/sessions/:id/greeting", async (c) => {
+    const id = c.req.param("id");
+    const { index } = z
+      .object({ index: z.number().int().min(0) })
+      .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "正在生成，无法切换开场" }, 409);
+    const session = store.session(id);
+    if (
+      session.messages.length > 1 ||
+      session.messages.some((message) => message.role !== "assistant")
+    )
+      return c.json({ error: "已有剧情，不能再替换开场；请新建存档" }, 409);
+    const item = store.cards().find((x) => x.id === session.cardId);
+    if (!item) throw new Error("作品不存在");
+    const options = greetings(item.card);
+    if (index >= options.length) return c.json({ error: "开场不存在" }, 400);
+    store.save(
+      id,
+      options[index] ? [{ role: "assistant", content: options[index] }] : [],
+    );
+    return c.json(store.session(id));
+  });
   app.post("/api/sessions/:id/preferences", async (c) => {
     const id = c.req.param("id");
     const { suggestions } = z
@@ -73,6 +260,23 @@ export function createApp(store: Store) {
     if (busy.has(id)) return c.json({ error: "请在生成结束后修改设置" }, 409);
     store.setSuggestions(id, suggestions);
     return c.json({ suggestions });
+  });
+  app.post("/api/sessions/:id/swipe", async (c) => {
+    const id = c.req.param("id");
+    const body = z
+      .object({
+        messageIndex: z.number().int().min(0),
+        index: z.number().int().min(0),
+      })
+      .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "生成中不能切换候选" }, 409);
+    const session = store.session(id);
+    const message = session.messages[body.messageIndex];
+    if (!message || message.role !== "assistant")
+      throw new Error("只能切换角色回复");
+    session.messages[body.messageIndex] = selectVariant(message, body.index);
+    store.save(id, session.messages);
+    return c.json(store.session(id));
   });
   app.post("/api/sessions/:id/stop", (c) => {
     controllers.get(c.req.param("id"))?.abort();
@@ -85,27 +289,45 @@ export function createApp(store: Store) {
     const session = store.session(id);
     const item = store.cards().find((x) => x.id === session.cardId);
     if (!item) throw new Error("作品不存在");
-    const runtimeCard = session.suggestions
-      ? {
-          ...item.card,
-          data: {
-            ...item.card.data,
-            post_history_instructions: [
-              item.card.data.post_history_instructions,
-              suggestionInstruction,
-            ]
-              .filter(Boolean)
-              .join("\n\n"),
-          },
-        }
-      : item.card;
-    const prompt = buildContext(
-      runtimeCard,
-      session.messages,
-      body.input,
-      body.budget,
-      body.reserve,
-    );
+    if (session.options.archived) throw new Error("请先恢复归档的聊天");
+    const worldbook = store
+      .assets("worldbooks")
+      .find((asset) => asset.id === session.options.worldbookId);
+    const presetAsset = store
+      .assets("presets")
+      .find((asset) => asset.id === session.options.presetId);
+    const preset = presetAsset
+      ? presetSchema.parse(presetAsset.original)
+      : undefined;
+    const presetParams = presetAsset
+      ? importPreset(presetAsset.original).parameters
+      : {};
+    const parameters = parametersSchema.parse({
+      ...presetParams,
+      ...session.options.parameters,
+      ...body.config.parameters,
+    });
+    if (parameters.seed === -1) delete parameters.seed;
+    const budget = preset?.openai_max_context ?? body.budget;
+    const reserve = preset?.openai_max_tokens ?? body.reserve;
+    let history = session.messages;
+    let input = body.input;
+    if (body.mode === "regenerate") {
+      if (
+        history.at(-1)?.role !== "assistant" ||
+        history.at(-2)?.role !== "user"
+      )
+        throw new Error("只能重新生成最近一次玩家行动的回复");
+      input = history.at(-2)!.content;
+      history = history.slice(0, -2);
+    } else if (!input) throw new Error("请输入内容");
+    const prompt = buildContext(item.card, history, input, budget, reserve, {
+      worldbook: worldbook?.original,
+      preset: presetAsset?.original,
+      ...session.options,
+      scanDepth: session.options.scanDepth,
+      extraInstruction: session.suggestions ? suggestionInstruction : undefined,
+    });
     // Recheck after the asynchronous body read before acquiring the turn.
     if (busy.has(id)) return c.json({ error: "该存档正在生成" }, 409);
     busy.add(id);
@@ -115,12 +337,17 @@ export function createApp(store: Store) {
     return stream(c, async (s) => {
       s.onAbort(() => controller.abort());
       try {
-        await s.write(JSON.stringify({ type: "prompt", prompt }) + "\n");
+        await s.write(
+          JSON.stringify({
+            type: "prompt",
+            prompt: { ...prompt, parameters },
+          }) + "\n",
+        );
         let reply = "";
         for await (const text of generate(
-          body.config,
+          { ...body.config, parameters },
           prompt.messages,
-          body.reserve,
+          reserve,
           controller.signal,
         )) {
           reply += text;
@@ -132,16 +359,25 @@ export function createApp(store: Store) {
         const parsed = session.suggestions
           ? parseSuggestions(reply)
           : { text: reply, suggestions: [] };
-        store.save(id, [
-          ...session.messages,
-          { role: "user", content: body.input },
-          {
-            role: "assistant",
-            content: parsed.text,
-            suggestions: parsed.suggestions,
-            raw: reply,
-          },
-        ]);
+        const replyMessage = {
+          role: "assistant" as const,
+          content: parsed.text,
+          suggestions: parsed.suggestions,
+          raw: reply,
+        };
+        store.save(
+          id,
+          body.mode === "regenerate"
+            ? [
+                ...session.messages.slice(0, -1),
+                appendVariant(session.messages.at(-1)!, replyMessage),
+              ]
+            : [
+                ...session.messages,
+                { role: "user", content: input },
+                replyMessage,
+              ],
+        );
         await s.write(JSON.stringify({ type: "done" }) + "\n");
       } catch {
         await s.write(

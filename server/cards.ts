@@ -19,6 +19,7 @@ export const cardSchema = z
         personality: z.string().default(""),
         scenario: z.string().default(""),
         first_mes: z.string().default(""),
+        alternate_greetings: z.array(z.string()).optional(),
         system_prompt: z.string().default(""),
         post_history_instructions: z.string().default(""),
         character_book: z
@@ -39,6 +40,7 @@ export function importCard(raw: unknown) {
     "personality",
     "scenario",
     "first_mes",
+    "alternate_greetings",
     "system_prompt",
     "post_history_instructions",
     "character_book",
@@ -70,8 +72,9 @@ export function importCard(raw: unknown) {
   warnings.push(
     "世界书仅扫描最近 6 条消息，按原顺序插入系统上下文；不执行脚本或 HTML",
   );
-  return { card, warnings };
+  warnings.push(
+    "备选开场仅支持单人存档首轮前选择；未实现通用 Swipe 和群聊随机开场",
+  );
+  return { card, warnings, original: structuredClone(raw) };
 }
-export function expand(text: string, name: string) {
-  return text.replace(/{{char}}/gi, name).replace(/{{user}}/gi, "玩家");
-}
+export { greetings, expand } from "../shared/character-text.js";

@@ -1,9 +1,11 @@
 import type { Message } from "./context.js";
+import { parametersSchema, type Parameters } from "./preset.js";
 export interface Config {
   baseUrl: string;
   apiKey: string;
   model: string;
   mock: boolean;
+  parameters?: Parameters;
 }
 export async function* generate(
   config: Config,
@@ -40,6 +42,7 @@ export async function* generate(
       ...(config.apiKey ? { Authorization: "Bearer " + config.apiKey } : {}),
     },
     body: JSON.stringify({
+      ...parametersSchema.parse(config.parameters ?? {}),
       model: config.model,
       messages,
       stream: true,

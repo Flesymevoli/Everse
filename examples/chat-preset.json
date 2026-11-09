@@ -1,0 +1,19 @@
+{
+  "temperature": 0.8,
+  "top_p": 0.95,
+  "openai_max_tokens": 1024,
+  "openai_max_context": 8192,
+  "prompts": [{ "identifier": "main", "role": "system", "content": "遵循角色和世界设定回应玩家的行动。" }],
+  "prompt_order": [{
+    "character_id": 100001,
+    "order": [
+      { "identifier": "main", "enabled": true },
+      { "identifier": "worldInfoBefore", "enabled": true },
+      { "identifier": "charDescription", "enabled": true },
+      { "identifier": "charPersonality", "enabled": true },
+      { "identifier": "scenario", "enabled": true },
+      { "identifier": "worldInfoAfter", "enabled": true },
+      { "identifier": "chatHistory", "enabled": true }
+    ]
+  }]
+}

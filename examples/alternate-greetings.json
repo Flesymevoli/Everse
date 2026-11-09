@@ -1,0 +1,11 @@
+{
+  "spec": "chara_card_v2",
+  "spec_version": "2.0",
+  "data": {
+    "name": "开场兼容示例",
+    "description": "一位守灯人。",
+    "first_mes": "夜幕落下，灯塔亮了。",
+    "alternate_greetings": ["清晨，{{char}}向{{user}}递来一封信。"],
+    "extensions": { "compatibility_example": { "note": "此字段仅保留，不参与请求。" } }
+  }
+}

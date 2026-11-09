@@ -1,0 +1,6 @@
+{
+  "entries": {
+    "0": { "key": ["灯塔"], "keysecondary": [], "content": "灯塔的门钥匙挂在守灯人的腰间。", "constant": false, "selective": false, "disable": false, "order": 100, "position": 0 },
+    "1": { "key": ["信"], "content": "信封上有一枚蓝色的印章。", "disable": false, "order": 90, "position": 1 }
+  }
+}

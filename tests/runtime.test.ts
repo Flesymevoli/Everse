@@ -20,7 +20,10 @@ const fixture = {
 test("校验卡片并公开不支持字段", () => {
   assert.throws(() => importCard({}));
   assert.ok(
-    importCard(fixture).warnings.some((w) => w.includes("alternate_greetings")),
+    importCard({
+      ...fixture,
+      data: { ...fixture.data, unknown_field: true },
+    }).warnings.some((w) => w.includes("unknown_field")),
   );
 });
 test("关键词和预算不会改变原历史", () => {
@@ -52,6 +55,10 @@ test("导入、开局、模拟流、重启 SQLite 恢复", async () => {
     const session = (await (
       await post("/api/sessions", { cardId: card.id })
     ).json()) as { id: string };
+    const greeting = await post("/api/sessions/" + session.id + "/greeting", {
+      index: 1,
+    });
+    assert.equal(greeting.status, 200);
     const r = await post("/api/sessions/" + session.id + "/turn", {
       input: "去塔",
       config: {
@@ -67,6 +74,7 @@ test("导入、开局、模拟流、重启 SQLite 恢复", async () => {
     store.close();
     store = new Store(path);
     const saved = store.session(session.id);
+    assert.equal(saved.messages[0].content, "第二开场");
     assert.equal(saved.messages.length, 3);
     assert.equal(saved.messages[1].content, "去塔");
   } finally {
