@@ -1,3 +1,4 @@
+import { readJson } from "./response";
 import {
   OpeningPreparation,
   type PreparingSession,
@@ -44,8 +45,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
           body: JSON.stringify(body),
         },
   );
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error ?? "请求失败");
+  const data = await readJson(r);
   return data as T;
 }
 function App() {

@@ -1,3 +1,4 @@
+import { readJson } from "./response";
 import { CreationGuide, PlayerFields } from "./CreationGuide";
 import { readPlayer } from "../shared/player";
 import { BookEntryFields, type BookDraft } from "./BookEntryFields";
@@ -63,8 +64,7 @@ export function Library({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error ?? "操作失败");
+    const data = await readJson(r);
     return data;
   }
   async function run(fn: () => Promise<void>) {
