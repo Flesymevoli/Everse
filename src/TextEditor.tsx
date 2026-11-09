@@ -12,7 +12,11 @@ export function TextEditor({
   onStop,
   onClose,
   onPreview,
+  expanded,
+  onExpand,
 }: {
+  expanded: boolean;
+  onExpand: () => void;
   selection: TextSelection;
   message: string;
   restore?: boolean;
@@ -60,10 +64,33 @@ export function TextEditor({
     message.slice(0, selection.start) +
     replacement +
     message.slice(selection.end);
-  if (!host) return null;
-  return createPortal(
+  if (!expanded && !restore)
+    return host
+      ? createPortal(
+          <div
+            className="selection-toolbar"
+            role="toolbar"
+            aria-label="选区操作"
+          >
+            <button onClick={onExpand}>改写描述</button>
+            <button
+              onClick={() => {
+                setManual(true);
+                onExpand();
+              }}
+            >
+              手动修改
+            </button>
+            <button onClick={onClose} aria-label="取消选区">
+              ×
+            </button>
+          </div>,
+          host,
+        )
+      : null;
+  return (
     <section
-      className="inline-text-editor"
+      className="inline-text-editor edit-side-panel"
       role="region"
       aria-label={restore ? "恢复原版本" : "局部改写"}
       onKeyDown={(e) => {
@@ -74,9 +101,9 @@ export function TextEditor({
       }}
     >
       <div className="inline-edit-heading">
-        <span>{restore ? "恢复预览" : "修改这几段"}</span>
+        <span>{restore ? "恢复原版本" : "编辑这段内容"}</span>
         <span className="muted">
-          {restore ? "确认后恢复" : "已包含选区所在的完整段落"}
+          {restore ? "确认后恢复" : "修改选中的段落，预览后再应用"}
         </span>
         <button aria-label="关闭正文编辑" disabled={working} onClick={onClose}>
           ×
@@ -88,6 +115,14 @@ export function TextEditor({
         </p>
       )}
       <fieldset disabled={working}>
+        <div className="edit-scope-note">
+          <strong>当前范围 · 这段正文</strong>
+          <p>
+            按完整段落选择。相关旧派生记忆会失效；不会自动改写后文或世界引导。
+          </p>
+        </div>
+        <label className="edit-section-label">修改前</label>
+        <div className="edit-before">{selection.original}</div>
         {!restore && (
           <>
             {!manual && (
@@ -163,6 +198,10 @@ export function TextEditor({
         )}
         {reviewed && (
           <>
+            <label className="edit-section-label">修改后 · 预览</label>
+            <div className="edit-after">
+              {replacement || "（删除所选内容）"}
+            </div>
             <p className="edit-legend" role="status">
               <span>删除线：移除</span>
               <span>陶土色：新增</span> · 预览未保存
@@ -232,7 +271,6 @@ export function TextEditor({
         )}
         {!reviewed && !working && <button onClick={onClose}>取消</button>}
       </div>
-    </section>,
-    host,
+    </section>
   );
 }

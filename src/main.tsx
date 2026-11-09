@@ -44,6 +44,7 @@ function App() {
     restore?: boolean;
     replacement?: string;
   } | null>(null);
+  const [editExpanded, setEditExpanded] = useState(false);
   const [editPreview, setEditPreview] = useState<string | null>(null);
   const [editedMark, setEditedMark] = useState<{
     session: string;
@@ -232,7 +233,7 @@ function App() {
   }
   return (
     <div
-      className={`app${sidebar ? " sidebar-open" : ""}${storyPanel ? " story-panel-open" : ""}`}
+      className={`app${sidebar ? " sidebar-open" : ""}${storyPanel ? " story-panel-open" : ""}${textEdit && editExpanded ? " edit-panel-open" : ""}`}
     >
       <header className="topbar">
         <button
@@ -494,6 +495,7 @@ function App() {
                 editPreview={editPreview}
                 highlight={editedMark?.session === session ? editedMark : null}
                 onEdit={(selection) => {
+                  setEditExpanded(false);
                   setEditPreview(null);
                   if (loadedSession?.editRevision)
                     setTextEdit({
@@ -512,6 +514,7 @@ function App() {
                       after: string;
                       revision: string;
                     }>(`sessions/${session}/edit-undo-preview`);
+                    setEditExpanded(true);
                     setTextEdit({
                       selection: {
                         index: preview.index,
@@ -702,7 +705,7 @@ function App() {
           </div>
         )}
       </main>
-      {storyPanel && (
+      {storyPanel && !(textEdit && editExpanded) && (
         <>
           <button
             className="story-panel-scrim"
@@ -753,6 +756,8 @@ function App() {
       {textEdit && (
         <TextEditor
           key={`${session}:${textEdit.selection.index}:${textEdit.selection.start}:${textEdit.restore}`}
+          expanded={editExpanded}
+          onExpand={() => setEditExpanded(true)}
           onPreview={setEditPreview}
           selection={textEdit.selection}
           message={textEdit.message}
