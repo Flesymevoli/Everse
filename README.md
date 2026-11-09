@@ -79,3 +79,5 @@ npm run test:install # 隔离临时数据，实测单服务页面与模拟互动
 从 `server/story.ts`、`server/context.ts` 和 `server/app.ts` 阅读运行链路。安装入口为 `start.cmd` / `scripts/launcher.mjs`；单服务入口为 `server/index.ts`。
 
 [PRD](docs/PRD.md) · [UX](docs/UX.md) · [架构](docs/ARCHITECTURE.md) · [Agent 增量方向](docs/AGENT-ALPHA.md) · [发布验证](docs/PUBLIC-RELEASE.md)
+
+正文选区现在使用批注式小框，保留陶土色预览。“同步更新设定”在确认后保存当前存档修订并按需加入后续请求，不覆盖原卡片/世界书。右栏按同次生成提供的有依据字段展示人物和物品，允许手动修正；不预设统一 RPG 属性。旧存档不自动补算，需开启故事记忆后继续一轮；模型缺失/错误状态不阻断正文。

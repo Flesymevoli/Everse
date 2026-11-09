@@ -1,3 +1,4 @@
+import { settingContext } from "./setting-sync.js";
 import { createHash } from "node:crypto";
 import type { Store } from "./store.js";
 import type { TextSelection } from "../shared/text-edit.js";
@@ -105,6 +106,8 @@ export function rewriteRequest(
       extraInstruction:
         "EVERSE_LOCAL_REWRITE\n这是局部编辑任务，不是继续故事。只输出替换选区的正文，不复述前后文，不输出说明、选项或状态标签。遵守明确修改要求，尽量保留未涉及的事实和作者风格。前后文只用于衔接。\n" +
         directorInstruction(session.options.director) +
+        "\n" +
+        settingContext(session.messages, selection.original).text +
         "\n编辑数据：\n" +
         JSON.stringify(task),
     },

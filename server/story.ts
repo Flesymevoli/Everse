@@ -41,7 +41,11 @@ export function readStory(
         invalidated++;
         continue;
       }
-      facts.set(fact.key, { ...fact, source: index });
+      facts.set(fact.key, {
+        ...fact,
+        panel: fact.panel ?? facts.get(fact.key)?.panel,
+        source: index,
+      });
     }
   });
   const latest = new Map<string, Correction>();
@@ -52,7 +56,10 @@ export function readStory(
   for (const correction of latest.values()) {
     if (correction.value === null) continue;
     const old = facts.get(correction.key);
+    // A manual current-state adjustment is a new baseline, not an eternal item count.
+    if (old?.panel && old.source >= correction.count) continue;
     facts.set(correction.key, {
+      ...(old?.panel ? { panel: old.panel } : {}),
       key: correction.key,
       kind: old?.kind ?? "fact",
       value: correction.value,
@@ -166,7 +173,7 @@ export function parseNarrative(raw: string, history: Message[]) {
     };
   }
 }
-export const storyInstruction = `在正文（及可选行动建议）之后，以 <story_update>{"changes":[{"key":"稳定的实体/属性键","kind":"scene|person|goal|fact|event","value":"简短事实或目标","evidence":"从本轮正文逐字引用的依据"}]}</story_update> 结束。只输出本轮新增或改变的记录，最多16条，没有变化可用空数组。复用已有键，避免同义重复；人物意图记为goal，不当成已发生事实；不从偏好或猜测推出事实。不虚构引用，不覆盖玩家修正。此协议只组织输出，不规定文学风格，不替代作者指令。`;
+export const storyInstruction = `在正文（及可选行动建议）之后，以 <story_update>{"changes":[{"key":"稳定的实体/属性键","kind":"scene|person|goal|fact|event","value":"简短事实或目标","evidence":"从本轮正文逐字引用的依据"}]}</story_update> 结束。只输出本轮新增或改变的记录，最多16条，没有变化可用空数组。复用已有键，避免同义重复；人物意图记为goal，不当成已发生事实；不从偏好或猜测推出事实。不虚构引用，不凭空覆盖玩家修正；角色面板的当前状态可根据后续正文明确发生的新变化更新，不把手工当前数值当作永久规则。需要显示在角色面板的事实可额外添加 panel:{"group":"character或inventory","entity":"人物称呼","label":"由作品决定的属性或物品名称"}。按作品选择字段，禁止统一添加生命值、等级等无依据属性。获得、消耗、丢失物品都复用同一key更新数量或写明已无；人物关系、状态、所在地也复用原key。没有依据不填。此协议只组织输出，不规定文学风格，不替代作者指令。`;
 
 export function storyContext(
   view: StoryView,

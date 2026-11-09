@@ -6,6 +6,14 @@ export const factSchema = z
     kind: z.enum(["scene", "person", "goal", "fact", "event"]),
     value: z.string().trim().min(1).max(600),
     evidence: z.string().trim().min(1).max(600),
+    panel: z
+      .object({
+        group: z.enum(["character", "inventory"]),
+        entity: z.string().trim().min(1).max(60),
+        label: z.string().trim().min(1).max(60),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type StoryFact = z.infer<typeof factSchema>;

@@ -2,9 +2,13 @@ import { expand as expandText, type Card } from "./cards.js";
 import { evaluateBook } from "./worldbook.js";
 import { presetSchema } from "./preset.js";
 export interface Message {
+  settingOverride?: boolean;
+  settingText?: string;
   warning?: string;
   story?: import("../shared/story.js").StoryPatch;
   variants?: {
+    settingOverride?: boolean;
+    settingText?: string;
     warning?: string;
     story?: import("../shared/story.js").StoryPatch;
     content: string;

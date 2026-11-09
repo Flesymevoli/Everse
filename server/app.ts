@@ -1,3 +1,4 @@
+import { settingContext, mergeSettingEdit } from "./setting-sync.js";
 import {
   savePreparation,
   confirmPreparation,
@@ -643,6 +644,7 @@ export function createApp(
           selection: textSelectionSchema,
           replacement: z.string().max(100000),
           fact: z.string().trim().max(600).default(""),
+          syncSettings: z.boolean().default(false),
         })
         .strict()
         .parse(await c.req.json());
@@ -656,6 +658,14 @@ export function createApp(
       throw new Error("修改后正文不能为空或超过10万字符");
     const edited = {
       ...message,
+      settingOverride: body.syncSettings,
+      settingText: body.syncSettings
+        ? mergeSettingEdit(
+            message.settingText,
+            body.selection.original,
+            body.replacement,
+          )
+        : undefined,
       content,
       suggestions: [],
       story: undefined,
@@ -668,6 +678,8 @@ export function createApp(
         i === index
           ? {
               ...v,
+              settingOverride: body.syncSettings,
+              settingText: edited.settingText,
               content,
               suggestions: [],
               story: undefined,
@@ -1069,6 +1081,11 @@ export function createApp(
         tracking && history.some((message) => message.warning)
           ? "部分历史回合的辅助状态未更新；与状态冲突时，以较新的正文和玩家明确修订为准，不凭空补全缺失记录。"
           : "",
+        settingContext(
+          history,
+          input,
+          Math.min(4000, Math.max(600, Math.floor(budget / 4))),
+        ).text,
         directorInstruction(session.options.director),
       ]
         .filter(Boolean)

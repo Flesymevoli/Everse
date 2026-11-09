@@ -1,6 +1,7 @@
+import { characterGroups } from "../shared/character-panel";
 import type { Card } from "../server/cards";
 import { useState } from "react";
-import type { StoryView } from "../shared/story";
+import type { StoryView, SourcedFact } from "../shared/story";
 import { directorSchema, type Director } from "../shared/director";
 const kindNames = {
   scene: "场景",
@@ -46,6 +47,76 @@ export function StoryPanel({
     ["world", "世界观修订"],
     ["direction", "剧情走向"],
   ] as const;
+  const groups = characterGroups(story?.facts ?? []);
+  const renderFact = (fact: SourcedFact) => (
+    <section className="character-section" key={fact.key}>
+      <h3>
+        {fact.panel?.label ??
+          (fact.key.startsWith("edit:") ? "正文修订" : fact.key)}
+      </h3>
+      <p>{fact.value}</p>
+      <small>
+        {fact.corrected
+          ? "玩家修正 · 优先保留"
+          : `来源：第 ${fact.source + 1} 条剧情 · ${kindNames[fact.kind]}`}
+      </small>
+      <details>
+        <summary>查看依据</summary>
+        <p>{fact.evidence}</p>
+      </details>
+      {editing === fact.key ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setSaving(true);
+            setError("");
+            void onCorrect(fact.key, value)
+              .then(() => setEditing(null))
+              .catch((e) =>
+                setError(e instanceof Error ? e.message : "保存失败"),
+              )
+              .finally(() => setSaving(false));
+          }}
+        >
+          <label>
+            修正内容
+            <textarea
+              aria-label="修正内容"
+              maxLength={600}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </label>
+          <button disabled={busy || saving || !value.trim()}>保存修正</button>
+          <button type="button" onClick={() => setEditing(null)}>
+            取消
+          </button>
+        </form>
+      ) : (
+        <button
+          disabled={busy}
+          onClick={() => {
+            setEditing(fact.key);
+            setValue(fact.value);
+          }}
+        >
+          修正
+        </button>
+      )}
+      {fact.corrected && (
+        <button
+          disabled={busy}
+          onClick={() =>
+            void onCorrect(fact.key, null).catch((e) =>
+              setError(e instanceof Error ? e.message : "撤销失败"),
+            )
+          }
+        >
+          撤销修正
+        </button>
+      )}
+    </section>
+  );
   return (
     <aside
       className="story-panel"
@@ -56,11 +127,16 @@ export function StoryPanel({
       }}
     >
       <div className="panel-heading">
-        <span className="eyebrow">故事状态</span>
+        <span className="eyebrow">角色与状态</span>
         <button onClick={onClose} aria-label="收起角色信息">
           ×
         </button>
       </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       {card ? (
         <>
           <section className="story-overview">
@@ -69,7 +145,7 @@ export function StoryPanel({
             </span>
             <h2>{card.data.name}</h2>
           </section>
-          <details open>
+          <details>
             <summary>人物简介</summary>
             <p>{card.data.description || "未填写人物描述。"}</p>
             {card.data.personality && <p>{card.data.personality}</p>}
@@ -77,8 +153,10 @@ export function StoryPanel({
         </>
       ) : (
         <div className="panel-empty">
-          <h2>故事正在展开</h2>
-          <p>不必创建角色卡，也可以维护故事中的人物与线索。</p>
+          <h2>{player?.name || "角色信息"}</h2>
+          {!groups.characters.length && (
+            <p>人物与物品将在剧情中逐步出现；不预设固定游戏属性。</p>
+          )}
         </div>
       )}
       {player && (player.name || player.description) && (
@@ -87,73 +165,94 @@ export function StoryPanel({
           <p>{player.description}</p>
         </section>
       )}
-      {fields.map(
-        ([key, label]) =>
-          director?.[key] && (
-            <section className="character-section" key={key}>
-              <h3>{label}</h3>
-              <p>{director[key]}</p>
-              <small>当前存档的玩家引导 · 下一轮优先采用</small>
+      {groups.characters.map((group) => (
+        <section
+          className="dynamic-character"
+          key={group.name}
+          aria-label={group.name + "角色档案"}
+        >
+          <h2>{group.name}</h2>
+          <div className="character-attributes">
+            {group.attributes.map(renderFact)}
+          </div>
+          {group.inventory.length > 0 && (
+            <section aria-label={group.name + "背包"}>
+              <h3>随身物品</h3>
+              {group.inventory.map(renderFact)}
             </section>
-          ),
-      )}
-      {onDirector && (
-        <section className="director-editor">
-          {!guide ? (
-            <button
-              disabled={busy}
-              onClick={() => {
-                setGuide(directorSchema.parse(director ?? {}));
-                setError("");
-              }}
-            >
-              调整人物与故事引导
-            </button>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setSaving(true);
-                setError("");
-                void onDirector(guide)
-                  .then(() => setGuide(null))
-                  .catch((e) =>
-                    setError(e instanceof Error ? e.message : "保存失败"),
-                  )
-                  .finally(() => setSaving(false));
-              }}
-            >
-              <fieldset disabled={busy || saving}>
-                <p className="muted">
-                  可随时修改，留空表示不额外干预。仅影响本存档下一轮，不改写已有剧情和原作品；剧情走向不作为已发生的事实。
-                </p>
-                {fields.map(([key, label]) => (
-                  <label key={key}>
-                    {label}
-                    <textarea
-                      aria-label={label}
-                      maxLength={10000}
-                      value={guide[key]}
-                      onChange={(e) =>
-                        setGuide({ ...guide, [key]: e.target.value })
-                      }
-                    />
-                  </label>
-                ))}
-                <button type="submit">保存故事引导</button>
-                <button type="button" onClick={() => setGuide(null)}>
-                  取消
-                </button>
-              </fieldset>
-            </form>
-          )}
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
           )}
         </section>
-      )}
+      ))}
+      <details className="world-guide-details">
+        <summary>设定与剧情引导</summary>
+        {fields.map(
+          ([key, label]) =>
+            director?.[key] && (
+              <section className="character-section" key={key}>
+                <h3>{label}</h3>
+                <p>{director[key]}</p>
+                <small>当前存档的玩家引导 · 下一轮优先采用</small>
+              </section>
+            ),
+        )}
+        {onDirector && (
+          <section className="director-editor">
+            {!guide ? (
+              <button
+                disabled={busy}
+                onClick={() => {
+                  setGuide(directorSchema.parse(director ?? {}));
+                  setError("");
+                }}
+              >
+                调整人物与故事引导
+              </button>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setSaving(true);
+                  setError("");
+                  void onDirector(guide)
+                    .then(() => setGuide(null))
+                    .catch((e) =>
+                      setError(e instanceof Error ? e.message : "保存失败"),
+                    )
+                    .finally(() => setSaving(false));
+                }}
+              >
+                <fieldset disabled={busy || saving}>
+                  <p className="muted">
+                    可随时修改，留空表示不额外干预。仅影响本存档下一轮，不改写已有剧情和原作品；剧情走向不作为已发生的事实。
+                  </p>
+                  {fields.map(([key, label]) => (
+                    <label key={key}>
+                      {label}
+                      <textarea
+                        aria-label={label}
+                        maxLength={10000}
+                        value={guide[key]}
+                        onChange={(e) =>
+                          setGuide({ ...guide, [key]: e.target.value })
+                        }
+                      />
+                    </label>
+                  ))}
+                  <button type="submit">保存故事引导</button>
+                  <button type="button" onClick={() => setGuide(null)}>
+                    取消
+                  </button>
+                </fieldset>
+              </form>
+            )}
+            {error && (
+              <p role="alert" className="error">
+                {error}
+              </p>
+            )}
+          </section>
+        )}
+      </details>
       {story && (
         <>
           <button
@@ -177,63 +276,10 @@ export function StoryPanel({
               尚无状态记录。手写或旧开场不会自动付费分析；开启后从下一轮开始记录。
             </p>
           )}
-          {story.facts.map((fact) => (
-            <section className="character-section" key={fact.key}>
-              <h3>{fact.key.startsWith("edit:")?"正文编辑 · 事实修订":fact.key}</h3>
-              <p>{fact.value}</p>
-              <small>
-                {fact.corrected
-                  ? "玩家修正 · 优先保留"
-                  : `来源：第 ${fact.source + 1} 条剧情 · ${kindNames[fact.kind]}`}
-              </small>
-              <details>
-                <summary>查看依据</summary>
-                <p>{fact.evidence}</p>
-              </details>
-              {editing === fact.key ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void onCorrect(fact.key, value).then(() =>
-                      setEditing(null),
-                    );
-                  }}
-                >
-                  <label>
-                    修正内容
-                    <textarea
-                      aria-label="修正内容"
-                      maxLength={600}
-                      value={value}
-                      onChange={(e) => setValue(e.target.value)}
-                    />
-                  </label>
-                  <button disabled={busy || !value.trim()}>保存修正</button>
-                  <button type="button" onClick={() => setEditing(null)}>
-                    取消
-                  </button>
-                </form>
-              ) : (
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    setEditing(fact.key);
-                    setValue(fact.value);
-                  }}
-                >
-                  修正
-                </button>
-              )}
-              {fact.corrected && (
-                <button
-                  disabled={busy}
-                  onClick={() => void onCorrect(fact.key, null)}
-                >
-                  撤销修正
-                </button>
-              )}
-            </section>
-          ))}
+          <details className="history-facts">
+            <summary>世界背景与历史记录（{groups.other.length}）</summary>
+            {groups.other.map(renderFact)}
+          </details>
         </>
       )}
     </aside>

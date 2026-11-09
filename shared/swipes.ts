@@ -10,6 +10,8 @@ export function variantsOf(message: Message): NonNullable<Message["variants"]> {
     return swipes.map((content) => ({ content }));
   return [
     {
+      settingOverride: message.settingOverride,
+      settingText: message.settingText,
       content: message.content,
       warning: message.warning,
       story: message.story,
@@ -34,6 +36,8 @@ export function selectVariant(message: Message, index: number): Message {
   const choice = variants[index];
   return {
     ...message,
+    settingOverride: choice.settingOverride,
+    settingText: choice.settingText,
     content: choice.content,
     warning: choice.warning,
     story: choice.story,
@@ -53,6 +57,8 @@ export function appendVariant(message: Message, choice: Message): Message {
   const variants = [
     ...variantsOf(message),
     {
+      settingOverride: choice.settingOverride,
+      settingText: choice.settingText,
       content: choice.content,
       warning: choice.warning,
       story: choice.story,

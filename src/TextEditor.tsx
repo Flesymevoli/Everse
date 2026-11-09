@@ -25,7 +25,7 @@ export function TextEditor({
   onGenerate: (
     instruction: string,
   ) => Promise<{ replacement: string; prompt: unknown }>;
-  onSave: (replacement: string, fact: string) => Promise<void>;
+  onSave: (replacement: string, syncSettings: boolean) => Promise<void>;
   onStop: () => Promise<void>;
   onClose: () => void;
   onPreview: (text: string | null) => void;
@@ -36,7 +36,7 @@ export function TextEditor({
     initialReplacement ?? selection.original,
   );
   const [manual, setManual] = useState(false);
-  const [fact, setFact] = useState("");
+  const [syncSettings, setSyncSettings] = useState(false);
   const [reviewed, setReviewed] = useState(!!restore);
   const [working, setWorking] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -88,9 +88,10 @@ export function TextEditor({
           host,
         )
       : null;
-  return (
+  if (!host) return null;
+  return createPortal(
     <section
-      className="inline-text-editor edit-side-panel"
+      className="inline-text-editor quicknote-editor"
       role="region"
       aria-label={restore ? "恢复原版本" : "局部改写"}
       onKeyDown={(e) => {
@@ -115,14 +116,10 @@ export function TextEditor({
         </p>
       )}
       <fieldset disabled={working}>
-        <div className="edit-scope-note">
-          <strong>当前范围 · 这段正文</strong>
-          <p>
-            按完整段落选择。相关旧派生记忆会失效；不会自动改写后文或世界引导。
-          </p>
-        </div>
-        <label className="edit-section-label">修改前</label>
-        <div className="edit-before">{selection.original}</div>
+        <details className="edit-original">
+          <summary>所选原文</summary>
+          <div className="edit-before">{selection.original}</div>
+        </details>
         {!restore && (
           <>
             {!manual && (
@@ -149,19 +146,6 @@ export function TextEditor({
                 />
                 <div className="inline-edit-tools">
                   <div>
-                    {["润色", "扩写", "精简"].map((text) => (
-                      <button
-                        type="button"
-                        key={text}
-                        onClick={() =>
-                          setInstruction(
-                            text + "这几段，保留未涉及的剧情事实。",
-                          )
-                        }
-                      >
-                        {text}
-                      </button>
-                    ))}
                     <button
                       className="primary edit-send"
                       aria-label="生成改写预览"
@@ -213,7 +197,9 @@ export function TextEditor({
                   !result.trim() ||
                   (!restore && replacement === selection.original)
                 }
-                onClick={() => void run(() => onSave(replacement, fact))}
+                onClick={() =>
+                  void run(() => onSave(replacement, syncSettings))
+                }
               >
                 {restore ? "确认恢复原版本" : "接受修改"}
               </button>
@@ -225,30 +211,25 @@ export function TextEditor({
           </>
         )}
         {!restore && (
-          <details className="inline-edit-details">
-            <summary>事实修订与更多</summary>
-            <label>
-              确认事实修订（可选）
-              <textarea
-                aria-label="确认事实修订"
-                rows={2}
-                maxLength={600}
-                value={fact}
-                onChange={(e) => setFact(e.target.value)}
-                placeholder="若改变了事实，可明确记录，例如：她仍留在书店。"
-              />
-            </label>
+          <label className="sync-settings-toggle">
+            <span>同步更新设定</span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={syncSettings}
+              onChange={(e) => setSyncSettings(e.target.checked)}
+            />
             <small>
-              相关旧派生状态将失效。后续剧情与手工世界引导不会自动重写。
+              仅本存档，确认后生效，不改原角色卡或世界书；不额外调用模型。
             </small>
-            {prompt !== null && (
-              <details>
-                <summary>本次上下文</summary>
-                <pre className="edit-preview">
-                  {JSON.stringify(prompt, null, 2)}
-                </pre>
-              </details>
-            )}
+          </label>
+        )}
+        {prompt !== null && (
+          <details className="inline-edit-details">
+            <summary>本次上下文</summary>
+            <pre className="edit-preview">
+              {JSON.stringify(prompt, null, 2)}
+            </pre>
           </details>
         )}
       </fieldset>
@@ -271,6 +252,7 @@ export function TextEditor({
         )}
         {!reviewed && !working && <button onClick={onClose}>取消</button>}
       </div>
-    </section>
+    </section>,
+    host,
   );
 }

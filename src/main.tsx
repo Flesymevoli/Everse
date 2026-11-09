@@ -233,7 +233,7 @@ function App() {
   }
   return (
     <div
-      className={`app${sidebar ? " sidebar-open" : ""}${storyPanel ? " story-panel-open" : ""}${textEdit && editExpanded ? " edit-panel-open" : ""}`}
+      className={`app${sidebar ? " sidebar-open" : ""}${storyPanel ? " story-panel-open" : ""}`}
     >
       <header className="topbar">
         <button
@@ -705,7 +705,7 @@ function App() {
           </div>
         )}
       </main>
-      {storyPanel && !(textEdit && editExpanded) && (
+      {storyPanel && (
         <>
           <button
             className="story-panel-scrim"
@@ -740,14 +740,17 @@ function App() {
               })
             }
             onCorrect={async (key, value) => {
-              await action(async () => {
+              setBusy(true);
+              try {
                 await api("sessions/" + session + "/story/correct", {
                   key,
                   value,
                   revision: loadedSession?.story?.revision,
                 });
                 await load(session);
-              });
+              } finally {
+                setBusy(false);
+              }
             }}
             onClose={() => setStoryPanel(false)}
           />
@@ -787,12 +790,12 @@ function App() {
               setBusy(false);
             }
           }}
-          onSave={async (replacement, fact) => {
+          onSave={async (replacement, syncSettings) => {
             await api(
               `sessions/${session}/${textEdit.restore ? "undo" : "edit-selection"}`,
               textEdit.restore
                 ? { revision: textEdit.selection.revision }
-                : { selection: textEdit.selection, replacement, fact },
+                : { selection: textEdit.selection, replacement, syncSettings },
             );
             const diff = textDiff(textEdit.selection.original, replacement);
             setEditedMark(
