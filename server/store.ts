@@ -128,6 +128,33 @@ export class Store {
       throw error;
     }
   }
+  deleteSession(id: string) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (!this.db.prepare("SELECT id FROM sessions WHERE id=?").get(id)) {
+        this.db.exec("ROLLBACK");
+        return false;
+      }
+      for (const table of [
+        "director_revisions",
+        "story_corrections",
+        "turn_drafts",
+        "model_usage",
+        "turn_receipts",
+        "revisions",
+      ]) {
+        this.db.prepare(`DELETE FROM ${table} WHERE sessionId=?`).run(id);
+      }
+      for (const table of ["preferences", "session_options", "sessions"]) {
+        this.db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
+      }
+      this.db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   sessions() {
     return this.db
       .prepare("SELECT id,cardId FROM sessions")
@@ -224,7 +251,9 @@ export class Store {
           JSON.stringify(this.session(id).messages)) ||
       previous.length !== this.session(id).messages.length
     )
-      throw new Error("编辑后已有新剧情，不能撤销覆盖；请在分支中手动调整旧内容");
+      throw new Error(
+        "编辑后已有新剧情，不能撤销覆盖；请在分支中手动调整旧内容",
+      );
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.save(id, JSON.parse(String(revision.messages)));

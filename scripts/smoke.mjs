@@ -16,7 +16,7 @@ const child = spawn(
   process.execPath,
   ["--import", "tsx", "server/index.ts", "--production"],
   {
-    env: { ...process.env, YUNO_PORT: String(port), YUNO_DATA_DIR: data },
+    env: { ...process.env, EVERSE_PORT: String(port), EVERSE_DATA_DIR: data, YUNO_PORT: String(port), YUNO_DATA_DIR: data },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   },

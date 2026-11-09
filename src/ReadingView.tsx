@@ -269,7 +269,7 @@ export function ReadingView({
             <button key={i} onClick={() => onChoose(choice)}>
               <span>0{i + 1}</span>
               {choice}
-              <span aria-hidden="true">↗</span>
+              <img className="choice-chevron" src="/figma/chevron.svg" alt="" />
             </button>
           ))}
           <small>选中后可以修改，也可以写下自己的想法。</small>

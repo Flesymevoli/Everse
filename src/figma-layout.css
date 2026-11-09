@@ -9,8 +9,8 @@
   --line: #e8e3da;
   --selection: #eae1d6;
   --panel: #f6f3ed;
-  --sage: #50664f;
-  --sage-soft: #e4e9df;
+  --sage: #657961;
+  --sage-soft: #e9e7dc;
   --sage-hover: #d9e1d3;
   --surface: #fffcf7;
 }
@@ -127,7 +127,7 @@ html {
   width: 100%;
   min-width: 0;
   text-align: left;
-  background: #ebe7df;
+  background: #e8ded2;
   border-radius: 11px;
   padding: 10px;
   margin: 6px 0;
@@ -156,9 +156,9 @@ html {
   width: 34px;
   height: 42px;
   flex: none;
-  background: #e3d9cc;
+  background: #a47a68;
   border-radius: 6px;
-  color: #6b5545;
+  color: #fff9f2;
   font-family: var(--font-app);
 }
 .story-cover.small {
@@ -204,7 +204,7 @@ html {
 .tree-saves .shelf-item[aria-pressed="true"] {
   background: var(--selection);
   color: var(--ink);
-  box-shadow: inset 3px 0 var(--sage);
+  box-shadow: inset 3px 0 #b97860;
 }
 .tree-action {
   display: flex;
@@ -238,8 +238,7 @@ html {
   padding-left: 0;
 }
 .sidebar-footer p {
-  font:
-    10px/1.6 var(--font-app);
+  font: 10px/1.6 var(--font-app);
   border-top: 1px solid var(--line);
   padding-top: 16px;
 }
@@ -295,15 +294,332 @@ html {
   }
 }
 
-/* Sage identifies the story and its state; terracotta remains the writing accent. */
-.recent-story:hover { background: var(--selection); }
-.story-tree-group > summary:hover { background: #ebe7df; border-radius: 8px; }
-.story-tree-group[open] > summary { color: var(--ink); }
-.tree-saves .shelf-item[aria-pressed="true"]:hover { background: #e3d9cc; }
-.story-panel .panel-heading .eyebrow, .dynamic-character h2 { color: var(--sage); }
-.story-monogram { background: var(--sage-soft); color: var(--sage); }
-.story-panel > button[role="switch"][aria-checked="true"] { background: var(--sage-soft); color: var(--sage); }
-.world-note button:not(:disabled) { color: var(--sage); }
-.world-note button:not(:disabled):hover { background: var(--sage-soft); }
-.composer { background: var(--surface); border-color: var(--line); box-shadow: 0 3px 16px #30291f05; }
-.topbar { border-bottom-color: transparent; }
+/* Alignment to Figma 2:2. Fonts, wordmark and round send control retain user-approved overrides. */
+.story-cover[data-tone="1"] {
+  background: #a09f89;
+  color: #fff;
+}
+.story-cover[data-tone="2"] {
+  background: #b4a495;
+  color: #fff;
+}
+.sidebar {
+  border-right: 1px solid var(--line);
+}
+.sidebar h2 {
+  color: #86796e;
+  font-weight: 500;
+}
+.recent-story:hover {
+  background: #e3d8cb;
+}
+.story-tree-group[open] > summary {
+  background: #f0eae2;
+  border-radius: 10px;
+}
+.story-tree-group > summary {
+  padding: 6px 9px;
+}
+.tree-saves {
+  border-left: 0;
+  margin-left: 18px;
+  padding-left: 0;
+}
+.tree-saves .shelf-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+.current-save {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  color: #92664e;
+}
+.tree-action {
+  min-height: 32px;
+  font-size: 12px;
+  color: #837062;
+}
+.sidebar-footer > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  width: 100%;
+  padding-top: 14px;
+}
+.local-profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-top: 1px solid var(--line);
+  margin-top: 32px;
+  padding-top: 16px;
+}
+.local-profile > span {
+  background: #dbcdc0;
+  color: #6a4c3c;
+  padding: 3px 7px;
+  border-radius: 8px;
+}
+.local-profile p {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 12px;
+  color: #504940;
+}
+.local-profile small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+.reader-breadcrumb {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #7a7168;
+}
+.reader-breadcrumb img {
+  flex: none;
+}
+.topbar {
+  border-bottom: 1px solid #efece6;
+  gap: 8px;
+  padding-inline: 24px;
+}
+.topbar .mode {
+  flex: none;
+}
+.saved-status::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #799884;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+.active-story-heading {
+  text-align: left;
+  margin-top: 8px;
+  margin-bottom: 26px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #eae5db;
+}
+.reading-layout .active-story-heading {
+  margin-top: 8px;
+}
+.active-story-heading .eyebrow {
+  color: #a3745e;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.active-story-heading h1 {
+  font-size: 35px;
+  letter-spacing: 0;
+  margin: 10px 0 8px;
+}
+.active-story-heading .subtitle {
+  font-size: 13px;
+  margin: 0;
+}
+.prose {
+  color: #443e38;
+  line-height: 1.95;
+}
+.passage p {
+  margin-bottom: 1.2em;
+}
+.action-record {
+  font-size: 13px;
+  color: #8e7c70;
+  border-left-color: #be8e78;
+}
+.suggestions {
+  margin-block: 18px;
+}
+.suggestions > p {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.suggestions button {
+  border: 1px solid #e9e3da;
+  border-radius: 9px;
+  background: #f2eee8;
+  padding: 6px 12px;
+  min-height: 34px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.suggestions button:hover {
+  background: #eae3da;
+}
+.choice-chevron {
+  margin-left: auto;
+  flex: none;
+}
+.composer {
+  background: #fff;
+  border-color: #e5ded6;
+  padding: 12px 16px;
+  box-shadow: 0 3px 16px #30291f05;
+}
+.reading-layout .composer textarea {
+  height: 48px;
+}
+.story-panel {
+  padding: 18px 23px 24px;
+}
+.panel-heading {
+  border-bottom: 1px solid #e5e0d7;
+  padding-bottom: 14px;
+}
+.panel-heading .eyebrow {
+  font-size: 16px;
+  letter-spacing: 0;
+  color: #39332e;
+}
+.story-overview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 0 16px;
+}
+.story-monogram {
+  width: 57px;
+  height: 60px;
+  border-radius: 13px;
+  background: #dbcec1;
+  color: #6a4c3c;
+  flex: none;
+}
+.panel-empty {
+  padding-block: 12px;
+}
+.panel-empty p {
+  font-size: 12px;
+}
+.dynamic-character h2 {
+  color: #37302a;
+}
+.story-panel .dynamic-character .character-attributes .character-section {
+  padding: 10px;
+  background: #fcfaf6;
+  border: 1px solid #ebe6dd;
+  border-radius: 10px;
+}
+.character-attributes {
+  gap: 8px;
+}
+.dynamic-character .character-section p {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.inventory-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.inventory-heading span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+.dynamic-character > section > .character-section {
+  margin-bottom: 8px;
+  padding: 12px !important;
+  background: #fcfaf6;
+  border-radius: 10px;
+}
+.story-panel > button[role="switch"][aria-checked="true"] {
+  background: var(--sage-soft);
+  color: var(--sage);
+  margin-top: 12px;
+  border-radius: 9px;
+}
+.story-panel > button[role="switch"][aria-checked="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background: #7a967e;
+}
+.danger-text {
+  color: #934c3b;
+}
+.delete-save-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow-wrap: anywhere;
+}
+.delete-save-dialog::backdrop {
+  background: #30291f55;
+}
+.delete-save-dialog h2 {
+  font-size: 20px;
+  font-weight: 500;
+  margin-top: 0;
+}
+.delete-save-dialog p {
+  font-size: 14px;
+  line-height: 1.8;
+}
+.danger-button {
+  background: #934c3b;
+  color: #fff;
+}
+.danger-button:hover {
+  background: #793f32;
+}
+@media (min-width: 1120px) {
+  .story-panel {
+    top: 0;
+    width: 298px;
+  }
+  .story-panel-open .reader,
+  .story-panel-open.sidebar-open .reader {
+    margin-right: 298px;
+  }
+  .story-panel-open .topbar {
+    margin-right: 298px;
+  }
+}
+@media (max-width: 760px) {
+  .topbar {
+    padding-inline: 8px;
+  }
+  .reader-breadcrumb {
+    font-size: 12px;
+  }
+  .active-story-heading h1 {
+    font-size: 27px;
+  }
+  .suggestions button,
+  .tree-action {
+    min-height: 44px;
+  }
+  .reading-layout .composer textarea {
+    height: 56px;
+  }
+  .composer {
+    padding: 10px 12px;
+  }
+}

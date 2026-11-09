@@ -118,6 +118,11 @@ function App() {
     loadedSession?.options.player ??
     readPlayer(activeWorld?.world.data) ??
     readPlayer(work?.card.data);
+  const storyTitle =
+    loadedSession?.options.storySource?.name ||
+    activeWorld?.world.data.name ||
+    work?.card.data.name ||
+    "我的故事";
   async function refresh() {
     const [w, s, worlds] = await Promise.all([
       api<Work[]>("cards"),
@@ -244,11 +249,23 @@ function App() {
         >
           ☰
         </button>
-        <span className="brand">
-          Ever<em>se</em>
+        <span className="reader-breadcrumb">
+          <img src="/figma/breadcrumb.svg" alt="" />
+          故事 / {session ? storyTitle : "书架"}
         </span>
-        <span className="mode">
-          {connections.selectedId === null ? "未配置模型" : "自有 API"}
+        <span
+          className={
+            "mode" + (session && !busy && !error ? " saved-status" : "")
+          }
+          role="status"
+        >
+          {busy
+            ? "正在处理…"
+            : error
+              ? "需要处理"
+              : session
+                ? "存档已载入"
+                : "本地优先"}
         </span>
         <button
           aria-expanded={storyPanel}
@@ -268,7 +285,9 @@ function App() {
       )}
       <aside className="sidebar">
         <div className="library-brand">
-          <span className="brand">Ever<em>se</em></span>
+          <span className="brand">
+            Ever<em>se</em>
+          </span>
           <button
             aria-label="收起作品侧栏"
             onClick={() => setSidebar(!sidebar)}
@@ -302,6 +321,31 @@ function App() {
           onLoad={(id) => void action(() => load(id))}
           onCreated={load}
           onConfigure={setSaveSettings}
+          onDelete={async (id) => {
+            setBusy(true);
+            try {
+              await api("sessions/" + id + "/delete", { confirm: true });
+              if (session === id) {
+                ++loadVersion.current;
+                setSession("");
+                setLoadedSession(null);
+                setSelected("");
+                setActiveWorldId(null);
+                setMessages([]);
+                setInput("");
+                setDraft("");
+                setPrompt(null);
+                setUsage(null);
+                setTextEdit(null);
+                setEditPreview(null);
+                setSaveSettings(null);
+              }
+              setSaves((current) => current.filter((s) => s.id !== id));
+              setNotice("存档已删除，其他存档和作品设定不受影响。");
+            } finally {
+              setBusy(false);
+            }
+          }}
           onStart={async (cardId, worldId) => {
             setBusy(true);
             try {
@@ -318,8 +362,16 @@ function App() {
           }}
         />
         <div className="sidebar-footer">
-          <button onClick={() => setSettings(true)}>偏好与模型设置</button>
-          <p>本地玩家 · 仅保存在此设备</p>
+          <button onClick={() => setSettings(true)}>
+            <img src="/figma/settings.svg" alt="" />
+            预设与模型设置
+          </button>
+          <div className="local-profile">
+            <span aria-hidden="true">我</span>
+            <p>
+              本地玩家<small>仅保存在此设备</small>
+            </p>
+          </div>
         </div>
       </aside>
       <main className={"reader" + (preparing ? "" : " reading-layout")}>
@@ -340,7 +392,11 @@ function App() {
               </button>
             </p>
           )}
-          <div className="book-heading">
+          <div
+            className={
+              "book-heading" + (session ? " active-story-heading" : "")
+            }
+          >
             <p className="eyebrow">一部由你参与的小说</p>
             <h1>
               {[

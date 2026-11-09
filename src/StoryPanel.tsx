@@ -56,66 +56,66 @@ export function StoryPanel({
           (fact.key.startsWith("edit:") ? "正文修订" : fact.key)}
       </h3>
       <p>{fact.value}</p>
-      <small>
-        {fact.corrected
-          ? "玩家修正 · 优先保留"
-          : `来源：第 ${fact.source + 1} 条剧情 · ${kindNames[fact.kind]}`}
-      </small>
-      <details>
-        <summary>查看依据</summary>
+      <details className="fact-actions">
+        <summary>依据与修正</summary>
+        <small>
+          {fact.corrected
+            ? "玩家修正 · 优先保留"
+            : `来源：第 ${fact.source + 1} 条剧情 · ${kindNames[fact.kind]}`}
+        </small>
         <p>{fact.evidence}</p>
-      </details>
-      {editing === fact.key ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setSaving(true);
-            setError("");
-            void onCorrect(fact.key, value)
-              .then(() => setEditing(null))
-              .catch((e) =>
-                setError(e instanceof Error ? e.message : "保存失败"),
-              )
-              .finally(() => setSaving(false));
-          }}
-        >
-          <label>
-            修正内容
-            <textarea
-              aria-label="修正内容"
-              maxLength={600}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </label>
-          <button disabled={busy || saving || !value.trim()}>保存修正</button>
-          <button type="button" onClick={() => setEditing(null)}>
-            取消
+        {editing === fact.key ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSaving(true);
+              setError("");
+              void onCorrect(fact.key, value)
+                .then(() => setEditing(null))
+                .catch((e) =>
+                  setError(e instanceof Error ? e.message : "保存失败"),
+                )
+                .finally(() => setSaving(false));
+            }}
+          >
+            <label>
+              修正内容
+              <textarea
+                aria-label="修正内容"
+                maxLength={600}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+            </label>
+            <button disabled={busy || saving || !value.trim()}>保存修正</button>
+            <button type="button" onClick={() => setEditing(null)}>
+              取消
+            </button>
+          </form>
+        ) : (
+          <button
+            disabled={busy}
+            onClick={() => {
+              setEditing(fact.key);
+              setValue(fact.value);
+            }}
+          >
+            修正
           </button>
-        </form>
-      ) : (
-        <button
-          disabled={busy}
-          onClick={() => {
-            setEditing(fact.key);
-            setValue(fact.value);
-          }}
-        >
-          修正
-        </button>
-      )}
-      {fact.corrected && (
-        <button
-          disabled={busy}
-          onClick={() =>
-            void onCorrect(fact.key, null).catch((e) =>
-              setError(e instanceof Error ? e.message : "撤销失败"),
-            )
-          }
-        >
-          撤销修正
-        </button>
-      )}
+        )}
+        {fact.corrected && (
+          <button
+            disabled={busy}
+            onClick={() =>
+              void onCorrect(fact.key, null).catch((e) =>
+                setError(e instanceof Error ? e.message : "撤销失败"),
+              )
+            }
+          >
+            撤销修正
+          </button>
+        )}
+      </details>
     </section>
   );
   return (
@@ -152,14 +152,14 @@ export function StoryPanel({
             {card.data.personality && <p>{card.data.personality}</p>}
           </details>
         </>
-      ) : (
+      ) : !groups.characters.length ? (
         <div className="panel-empty">
           <h2>{player?.name || "角色信息"}</h2>
           {!groups.characters.length && (
             <p>人物与物品将在剧情中逐步出现；不预设固定游戏属性。</p>
           )}
         </div>
-      )}
+      ) : null}
       {player && (player.name || player.description) && (
         <section>
           <h3>{player.name || "玩家身份"}</h3>
@@ -178,7 +178,10 @@ export function StoryPanel({
           </div>
           {group.inventory.length > 0 && (
             <section aria-label={group.name + "背包"}>
-              <h3>随身物品</h3>
+              <h3 className="inventory-heading">
+                <img src="/figma/inventory.svg" alt="" />
+                随身物品<span>{group.inventory.length} 项</span>
+              </h3>
               {group.inventory.map(renderFact)}
             </section>
           )}

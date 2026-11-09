@@ -476,6 +476,16 @@ export function createApp(
       return c.json(asset.original);
     });
   }
+  app.post("/api/sessions/:id/delete", async (c) => {
+    const id = c.req.param("id");
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(await c.req.json());
+    if (busy.has(id)) return c.json({ error: "请先停止生成，再删除存档" }, 409);
+    if (!store.deleteSession(id))
+      return c.json({ error: "存档不存在或已删除" }, 404);
+    return c.json({ deleted: id });
+  });
   app.post("/api/sessions/:id/options", async (c) => {
     const id = c.req.param("id");
     const options = optionsSchema

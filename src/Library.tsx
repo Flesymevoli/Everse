@@ -1,3 +1,4 @@
+import { DeleteSaveDialog } from "./DeleteSaveDialog";
 import { libraryGroups, type LibrarySave } from "./library-groups";
 import { readJson, fetchLocal } from "./response";
 
@@ -27,6 +28,7 @@ export function Library({
   onStart,
   onCreated,
   onConfigure,
+  onDelete,
 }: {
   characters: Character[];
   worlds: WorldItem[];
@@ -37,6 +39,7 @@ export function Library({
   onLoad: (id: string) => void;
   onCreated: (id: string) => Promise<void>;
   onConfigure: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
   onStart: (cardId: string, worldId: string) => Promise<void>;
 }) {
   const [playerName, setPlayerName] = useState(""),
@@ -77,6 +80,7 @@ export function Library({
     }
   }
   const locked = busy || working;
+  const [deleting, setDeleting] = useState<Save | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null),
     [saveName, setSaveName] = useState("");
   function start(character = "", world = "") {
@@ -84,6 +88,11 @@ export function Library({
     setWorldId(world);
     setError("");
     void run(() => onStart(character, world));
+  }
+  function coverTone(name: string) {
+    return (
+      [...name].reduce((sum, char) => sum + (char.codePointAt(0) ?? 0), 0) % 3
+    );
   }
   function saveButtons(items: Save[], scope = "manage") {
     return items.map((s, i) => (
@@ -130,6 +139,7 @@ export function Library({
             >
               {s.options?.name ?? `存档 ${saves.indexOf(s) + 1}`}
               {s.options?.archived ? " · 已归档" : ""}
+              {session === s.id && <span className="current-save">当前</span>}
             </button>
             <button
               className="save-more"
@@ -141,7 +151,7 @@ export function Library({
                   menu = document.getElementById(`save-menu-${scope}-${s.id}`);
                 if (menu) {
                   menu.style.left = `${Math.max(8, Math.min(r.right - 196, window.innerWidth - 204))}px`;
-                  menu.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 160))}px`;
+                  menu.style.top = `${Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 220))}px`;
                 }
               }}
             >
@@ -178,6 +188,18 @@ export function Library({
                 }}
               >
                 存档设置
+              </button>
+              <button
+                className="danger-text"
+                disabled={locked}
+                onClick={() => {
+                  document
+                    .getElementById(`save-menu-${scope}-${s.id}`)
+                    ?.hidePopover();
+                  setDeleting(s);
+                }}
+              >
+                删除存档…
               </button>
             </div>
           </>
@@ -225,6 +247,17 @@ export function Library({
           {error}
         </p>
       )}
+      {deleting && (
+        <DeleteSaveDialog
+          name={deleting.options?.name || "未命名存档"}
+          onClose={() => setDeleting(null)}
+          onDelete={async () => {
+            await onDelete(deleting.id);
+            setRecentIds((ids) => ids.filter((id) => id !== deleting.id));
+            setDeleting(null);
+          }}
+        />
+      )}
       <section className="recent-stories" aria-label="最近继续">
         <h2>最近继续</h2>
         {recent.length ? (
@@ -239,7 +272,10 @@ export function Library({
                 disabled={locked}
                 onClick={() => onLoad(s.id)}
               >
-                <span className="story-cover">
+                <span
+                  className="story-cover"
+                  data-tone={coverTone(group?.name || "故事")}
+                >
                   {Array.from(group?.name || "故")[0]}
                 </span>
                 <span>
@@ -275,7 +311,9 @@ export function Library({
                 src="/figma/collapsed.svg"
                 alt=""
               />
-              <span className="story-cover small">{Array.from(g.name)[0]}</span>
+              <span className="story-cover small" data-tone={coverTone(g.name)}>
+                {Array.from(g.name)[0]}
+              </span>
               <span>{g.name}</span>
             </summary>
             <div className="tree-saves">
@@ -309,7 +347,7 @@ export function Library({
                   else start(g.cardId, g.worldId);
                 }}
               >
-                <img className="figma-icon" src="/figma/plus.svg" alt="" />
+                <img className="figma-icon" src="/figma/add-save.svg" alt="" />
                 新建存档
               </button>
               {g.saves.length > 0 && (
