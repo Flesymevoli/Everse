@@ -11,7 +11,7 @@ import {
 import { createApp } from "../server/app.js";
 import { Store } from "../server/store.js";
 import { importCard } from "../server/cards.js";
-test("连接元信息持久化但 Key 和付费选择不保存；删除当前连接回到模拟", () => {
+test("连接选择持久化但 Key 不保存；旧格式兼容，丢失连接不静默切换模拟", () => {
   const state: Connections = {
     profiles: [
       {
@@ -34,12 +34,17 @@ test("连接元信息持久化但 Key 和付费选择不保存；删除当前连
   const saved = serializeConnections(state);
   assert.ok(!saved.includes("apiKey"));
   assert.ok(!saved.includes("test-only"));
-  assert.ok(!saved.includes("selectedId"));
+  assert.equal(JSON.parse(saved).selectedId, "b");
   const restored = restoreConnections(saved);
   assert.equal(restored.profiles.length, 2);
   assert.equal(restored.profiles[0].name, "甲");
   assert.equal(restored.profiles[1].apiKey, "");
-  assert.equal(resolveConnection(restored).mock, true);
+  assert.equal(resolveConnection(restored).mock, false);
+  assert.equal(resolveConnection(restored).model, "model-b");
+  const missing = restoreConnections(
+    JSON.stringify({ profiles: [], selectedId: "missing" }),
+  );
+  assert.throws(() => resolveConnection(missing), /不存在/);
   assert.equal(removeConnection(state, "a").selectedId, "b");
   assert.equal(removeConnection(state, "b").selectedId, null);
   assert.equal(
@@ -74,7 +79,10 @@ test("非法 URL 和模型明确拒绝，带凭据 URL 不写入存储", () => {
       selectedId: "a",
     };
     assert.throws(() => resolveConnection(state), /Base URL/);
-    assert.equal(JSON.parse(serializeConnections(state))[0].baseUrl, "");
+    assert.equal(
+      JSON.parse(serializeConnections(state)).profiles[0].baseUrl,
+      "",
+    );
   }
   assert.throws(
     () =>

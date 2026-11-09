@@ -20,7 +20,7 @@ import { z } from "zod";
 import { importCard, expand, greetings } from "./cards.js";
 import { buildContext } from "./context.js";
 import { parseSuggestions, suggestionInstruction } from "./suggestions.js";
-import { generate, ModelRequestError } from "./provider.js";
+import { generate, generationError } from "./provider.js";
 import type { Store } from "./store.js";
 import { readPngCard } from "./png-card.js";
 import { importBook } from "./worldbook.js";
@@ -136,9 +136,8 @@ export function createApp(
       return c.json(
         {
           error:
-            error instanceof ModelRequestError
-              ? error.message + "原草稿已保留。"
-              : "开场生成未完成，原草稿已保留。请检查模型配置或稍后手动重试。",
+            generationError(error, controller.signal.aborted) +
+            "原草稿已保留。",
         },
         400,
       );
@@ -618,12 +617,11 @@ export function createApp(
               ],
         );
         await s.write(JSON.stringify({ type: "done" }) + "\n");
-      } catch {
+      } catch (error) {
         await s.write(
           JSON.stringify({
             type: "error",
-            error:
-              "生成未完成，本轮未保存。请检查 API 配置、输出预算和网络后重试。",
+            error: generationError(error, controller.signal.aborted),
           }) + "\n",
         );
       } finally {

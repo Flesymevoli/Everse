@@ -20,6 +20,7 @@ const metadata = z.object({
   name: z.string().max(100),
   baseUrl: z.string().max(2000),
   model: z.string().max(200),
+  saved: z.boolean().optional(),
 });
 function safeUrl(value: string): boolean {
   try {
@@ -37,10 +38,16 @@ function safeUrl(value: string): boolean {
 }
 export function restoreConnections(raw: string | null): Connections {
   try {
-    const parsed = z
-      .array(metadata)
-      .max(50)
-      .parse(JSON.parse(raw ?? "[]"));
+    const value = JSON.parse(raw ?? "[]");
+    const envelope = Array.isArray(value)
+      ? { profiles: value, selectedId: null }
+      : z
+          .object({
+            profiles: z.array(z.unknown()),
+            selectedId: z.string().nullable(),
+          })
+          .parse(value);
+    const parsed = z.array(metadata).max(50).parse(envelope.profiles);
     if (new Set(parsed.map((p) => p.id)).size !== parsed.length)
       throw new Error();
     return {
@@ -49,22 +56,24 @@ export function restoreConnections(raw: string | null): Connections {
         baseUrl: safeUrl(p.baseUrl) ? p.baseUrl : "",
         apiKey: "",
       })),
-      selectedId: null,
+      selectedId: envelope.selectedId,
     };
   } catch {
     return { profiles: [], selectedId: null };
   }
 }
 export function serializeConnections(state: Connections): string {
-  // Explicit allowlist: keys and active paid connection never persist.
-  return JSON.stringify(
-    state.profiles.map((p) => ({
+  // Remember the user's explicit choice, never their key. Restoring does not generate.
+  return JSON.stringify({
+    selectedId: state.selectedId,
+    profiles: state.profiles.map((p) => ({
       id: p.id,
       name: p.name,
       baseUrl: safeUrl(p.baseUrl) ? p.baseUrl : "",
       model: p.model,
+      saved: p.saved,
     })),
-  );
+  });
 }
 export function removeConnection(state: Connections, id: string): Connections {
   return {

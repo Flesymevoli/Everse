@@ -121,6 +121,21 @@ test("长设定开场真实 HTTP：自动省略输出限制，手动及预设大
     assert.ok(!text.includes("private-prompt-and-key"));
     assert.equal(requests.length, 3);
     assert.equal(store.session(id).messages.length, 0);
+    assert.equal(
+      (await post(`/api/sessions/${id}/start`, { ...draft, opening: "开场" }))
+        .status,
+      200,
+    );
+    const failedTurn = await post(`/api/sessions/${id}/turn`, {
+      input: "继续",
+      config,
+    });
+    const stream = await failedTurn.text();
+    assert.match(stream, /供应商报告上下文过长/);
+    assert.ok(!stream.includes("private-prompt-and-key"));
+    assert.ok(!stream.includes("【模拟回复】"));
+    assert.equal(store.session(id).messages.length, 1);
+    assert.equal(requests.length, 4);
   } finally {
     store.close();
     await new Promise<void>((r) => server.close(() => r()));

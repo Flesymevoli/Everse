@@ -115,7 +115,7 @@ function App() {
           profiles: [
             ...profiles.map((p) => ({ ...p, apiKey: "" })),
             ...current.profiles.filter(
-              (p) => !profiles.some((saved) => saved.id === p.id),
+              (p) => !p.saved && !profiles.some((saved) => saved.id === p.id),
             ),
           ],
         })),

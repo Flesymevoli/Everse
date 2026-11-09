@@ -8,6 +8,13 @@ export interface Config {
   parameters?: Parameters;
 }
 export class ModelRequestError extends Error {}
+export function generationError(error: unknown, cancelled = false): string {
+  if (cancelled) return "已停止生成，本轮未保存。";
+  if (error instanceof ModelRequestError) return error.message + "本轮未保存。";
+  if (error instanceof Error && error.name === "TimeoutError")
+    return "模型请求超过 90 秒等待时间，本轮未保存。请检查供应商响应速度，或改用响应更快的模型。未自动重试。";
+  return "模型连接或响应流未完成，本轮未保存。请检查 API 地址、网络和供应商状态；未切换到模拟模型，也未自动重试。";
+}
 export async function* generate(
   config: Config,
   messages: Message[],
