@@ -8,6 +8,7 @@ import { BookEntryFields, type BookDraft } from "./BookEntryFields";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import type { Card } from "../server/cards";
+import type { Preparation } from "../shared/preparation";
 import type { World } from "../server/worlds";
 export type WorldItem = {
   id: string;
@@ -18,6 +19,7 @@ export type WorldItem = {
 type Character = { id: string; card: Card; warnings: string[] };
 type Save = LibrarySave;
 export function Library({
+  hiddenGroups,
   characters,
   worlds,
   saves,
@@ -29,7 +31,9 @@ export function Library({
   onCreated,
   onConfigure,
   onDelete,
+  onDeleteWorld,
 }: {
+  hiddenGroups: string[];
   characters: Character[];
   worlds: WorldItem[];
   saves: Save[];
@@ -40,7 +44,12 @@ export function Library({
   onCreated: (id: string) => Promise<void>;
   onConfigure: (id: string) => void;
   onDelete: (id: string) => Promise<void>;
-  onStart: (cardId: string, worldId: string) => Promise<void>;
+  onDeleteWorld: (key: string, ids: string[]) => Promise<void>;
+  onStart: (
+    cardId: string,
+    worldId: string,
+    source?: Preparation["source"],
+  ) => Promise<void>;
 }) {
   const [playerName, setPlayerName] = useState(""),
     [playerDescription, setPlayerDescription] = useState("");
@@ -81,6 +90,9 @@ export function Library({
   }
   const locked = busy || working;
   const [deleting, setDeleting] = useState<Save | null>(null);
+  const [deletingWorld, setDeletingWorld] = useState<
+    ReturnType<typeof libraryGroups>[number] | null
+  >(null);
   const [renaming, setRenaming] = useState<string | null>(null),
     [saveName, setSaveName] = useState("");
   function start(character = "", world = "") {
@@ -242,6 +254,21 @@ export function Library({
     .filter((s): s is Save => !!s && !s.options?.archived);
   return (
     <>
+      {deletingWorld && (
+        <DeleteSaveDialog
+          name={deletingWorld.name}
+          kind="世界"
+          description={`将永久删除这个世界分组及其 ${deletingWorld.saves.length} 份存档（含归档），无法撤销。其他世界、共享角色卡、世界书、预设和导入文档不会删除。`}
+          onClose={() => setDeletingWorld(null)}
+          onDelete={async () => {
+            await onDeleteWorld(
+              deletingWorld.key,
+              deletingWorld.saves.map((s) => s.id),
+            );
+            setDeletingWorld(null);
+          }}
+        />
+      )}
       {error && (
         <p role="alert" className="error">
           {error}
@@ -291,87 +318,89 @@ export function Library({
       </section>
       <section className="story-tree" aria-label="我的世界">
         <h2>我的世界</h2>
-        {groups.map((g, i) => (
-          <details
-            className="story-tree-group"
-            key={g.key}
-            open={openGroups[g.key] ?? g.saves.some((s) => s.id === session)}
-            onToggle={(e) => {
-              const open = e.currentTarget.open;
-              setOpenGroups((previous) =>
-                previous[g.key] === open
-                  ? previous
-                  : { ...previous, [g.key]: open },
-              );
-            }}
-          >
-            <summary>
-              <img
-                className="figma-icon tree-chevron"
-                src="/figma/collapsed.svg"
-                alt=""
-              />
-              <span className="story-cover small" data-tone={coverTone(g.name)}>
-                {Array.from(g.name)[0]}
-              </span>
-              <span>{g.name}</span>
-            </summary>
-            <div className="tree-saves">
-              {saveButtons(g.saves, "tree" + i)}
-              {!g.saves.length && (
-                <small className="shelf-empty">尚无存档</small>
-              )}
-              <button
-                disabled={locked}
-                className="tree-action"
-                onClick={() => {
-                  if (g.source)
-                    void run(async () => {
-                      const created = await post("sessions", { prepare: true });
-                      await post("sessions/" + created.id + "/preparation", {
-                        source: g.source,
-                        characterMode: "none",
-                        worldMode: "none",
-                        cardId: "",
-                        worldId: "",
-                        character: { name: "", description: "" },
-                        world: { name: "", description: "" },
-                        player: { name: "", description: "" },
-                        opening: "",
-                        presetId: null,
-                        worldbookId: null,
-                      });
-                      await onRefresh();
-                      await onCreated(created.id);
-                    });
-                  else start(g.cardId, g.worldId);
-                }}
-              >
-                <img className="figma-icon" src="/figma/add-save.svg" alt="" />
-                新建存档
-              </button>
-              {g.saves.length > 0 && (
+        {groups
+          .filter((g) => g.saves.length > 0 || !hiddenGroups.includes(g.key))
+          .map((g, i) => (
+            <details
+              className="story-tree-group"
+              key={g.key}
+              open={openGroups[g.key] ?? g.saves.some((s) => s.id === session)}
+              onToggle={(e) => {
+                const open = e.currentTarget.open;
+                setOpenGroups((previous) =>
+                  previous[g.key] === open
+                    ? previous
+                    : { ...previous, [g.key]: open },
+                );
+              }}
+            >
+              <summary>
+                <img
+                  className="figma-icon tree-chevron"
+                  src="/figma/collapsed.svg"
+                  alt=""
+                />
+                <span
+                  className="story-cover small"
+                  data-tone={coverTone(g.name)}
+                >
+                  {Array.from(g.name)[0]}
+                </span>
+                <span>{g.name}</span>
+              </summary>
+              <div className="tree-saves">
+                {saveButtons(g.saves, "tree" + i)}
+                {!g.saves.length && (
+                  <small className="shelf-empty">尚无存档</small>
+                )}
                 <button
-                  className="tree-action"
                   disabled={locked}
-                  onClick={() =>
-                    onConfigure(
-                      g.saves.find((s) => s.id === session)?.id ??
-                        g.saves[0].id,
-                    )
-                  }
+                  className="tree-action"
+                  onClick={() => {
+                    if (g.source)
+                      void run(() => onStart(g.cardId, g.worldId, g.source));
+                    else start(g.cardId, g.worldId);
+                  }}
                 >
                   <img
                     className="figma-icon"
-                    src="/figma/world-settings.svg"
+                    src="/figma/add-save.svg"
                     alt=""
                   />
-                  设定与角色
+                  新建存档
                 </button>
-              )}
-            </div>
-          </details>
-        ))}
+                {g.saves.length > 0 && (
+                  <button
+                    className="tree-action"
+                    disabled={locked}
+                    onClick={() =>
+                      onConfigure(
+                        g.saves.find((s) => s.id === session)?.id ??
+                          g.saves[0].id,
+                      )
+                    }
+                  >
+                    <img
+                      className="figma-icon"
+                      src="/figma/world-settings.svg"
+                      alt=""
+                    />
+                    设定与角色
+                  </button>
+                )}
+                <details className="world-actions">
+                  <summary aria-label={`世界操作：${g.name}`}>⋯</summary>
+                  <button
+                    disabled={locked}
+                    className="danger-button"
+                    onClick={() => setDeletingWorld(g)}
+                  >
+                    删除世界…
+                  </button>
+                </details>
+              </div>
+            </details>
+          ))}
       </section>
       <details className="library-manager">
         <summary>管理角色卡与世界书</summary>
@@ -494,7 +523,10 @@ export function Library({
               <details className="work-group" key={w.id}>
                 <summary>{w.world.data.name}</summary>
                 <div className="work-saves">
-                  <p>{w.world.data.description || "未填写世界设定"}</p>
+                  <p className="library-description">
+                    {w.world.data.description.slice(0, 180) || "未填写世界设定"}
+                    {w.world.data.description.length > 180 ? "…" : ""}
+                  </p>
                   {saveButtons(
                     saves.filter((s) => s.options?.worldId === w.id),
                   )}

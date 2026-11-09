@@ -623,3 +623,26 @@ html {
     padding: 10px 12px;
   }
 }
+.library-manager .library-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  max-height: 5.1em;
+}
+.library-manager .work-group > summary {
+  overflow-wrap: anywhere;
+}
+.prompt-modules { margin-block: 1.5rem 2rem; }
+.prompt-module-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-block: .65rem; border-bottom: 1px solid var(--border, #e8e0d6); }
+.prompt-module-row .toggle-row { min-width: 0; margin: 0; }
+.prompt-module-row .toggle-row span { overflow-wrap: anywhere; }
+.prompt-module-row small { display: block; opacity: .65; font-size: .8rem; }
+.module-actions { display: flex; flex-wrap: wrap; flex-shrink: 0; gap: .2rem; }
+.prompt-module-editor { margin-top: 1rem; padding: 1rem; background: #f3f0e9; border-radius: 12px; }
+.module-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.module-fields label { min-width: 0; }
+@media (max-width: 560px) { .prompt-module-row { align-items: start; flex-direction: column; } .module-fields { grid-template-columns: minmax(0, 1fr); } }
+.prompt-modules a { color: #a4654b; text-underline-offset: .2em; }

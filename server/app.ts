@@ -1,12 +1,15 @@
 import { settingContext, mergeSettingEdit } from "./setting-sync.js";
 import {
   savePreparation,
+  createPreparedSession,
   confirmPreparation,
   openingRequest,
   ensurePreparation,
   recoverOpening,
 } from "./preparation.js";
 import { randomUUID } from "node:crypto";
+import { libraryGroups } from "../shared/library-groups.js";
+import { promptModuleRoutes, readPromptModules } from "./prompt-modules.js";
 import { textSelectionSchema } from "../shared/text-edit.js";
 import { editRevision, selectedText, rewriteRequest } from "./text-edit.js";
 import { generateOpeningGuide } from "./opening-guide.js";
@@ -87,6 +90,7 @@ export function createApp(
   const controllers = new Map<string, AbortController>();
   app.use("*", bodyLimit({ maxSize: 2 * 1024 * 1024 }));
   app.use("*", async (c, next) => {
+    if (c.req.path.startsWith("/api/")) c.header("Cache-Control", "no-store");
     const host = (c.req.header("host") ?? new URL(c.req.url).host).split(
       ":",
     )[0];
@@ -117,6 +121,7 @@ export function createApp(
   app.get("/api/health", (c) =>
     c.json({ application: "Everse", status: "ok" }),
   );
+  app.route("/api/prompt-modules", promptModuleRoutes(store));
   app.post("/api/documents/word", async (c) => {
     const name = z.string().min(1).max(200).parse(c.req.query("name"));
     const buffer = Buffer.from(await c.req.arrayBuffer());
@@ -855,6 +860,63 @@ export function createApp(
     return c.json(item.original ?? item.card);
   });
   app.get("/api/sessions", (c) => c.json(store.sessions()));
+  app.get("/api/library/hidden", (c) =>
+    c.json(
+      store.db
+        .prepare("SELECT key FROM hidden_library_groups")
+        .all()
+        .map((r) => String(r.key)),
+    ),
+  );
+  app.post("/api/library/delete", async (c) => {
+    const body = z
+      .object({
+        key: z.string().max(200000),
+        ids: z.array(z.string()).max(10000),
+        confirm: z.literal(true),
+      })
+      .strict()
+      .parse(await c.req.json());
+    const group = libraryGroups(
+      store.sessions(),
+      store.cards().map((v) => ({ id: v.id, name: v.card.data.name })),
+      store.worlds().map((v) => ({ id: v.id, name: v.world.data.name })),
+    ).find((g) => g.key === body.key);
+    if (!group) return c.json({ error: "世界已不存在，请刷新书架" }, 404);
+    const ids = group.saves.map((s) => s.id);
+    if (
+      ids.length !== body.ids.length ||
+      ids.some((id) => !body.ids.includes(id))
+    )
+      return c.json({ error: "世界中的存档已改变，请重新查看并确认删除" }, 409);
+    if (ids.some((id) => busy.has(id)))
+      return c.json({ error: "请先停止这个世界中正在进行的生成" }, 409);
+    store.db.exec("SAVEPOINT delete_library_world");
+    try {
+      for (const id of ids) store.deleteSession(id);
+      // World groups are not shared authoring assets. Keep cards/books used by other stories.
+      if (group.worldId || group.cardId)
+        store.db
+          .prepare(
+            "INSERT OR IGNORE INTO hidden_library_groups(key) VALUES (?)",
+          )
+          .run(group.key);
+      store.db.exec("RELEASE delete_library_world");
+    } catch (error) {
+      store.db.exec(
+        "ROLLBACK TO delete_library_world; RELEASE delete_library_world",
+      );
+      throw error;
+    }
+    return c.json({ deleted: ids });
+  });
+  app.post("/api/sessions/prepare", async (c) => {
+    const body = z
+      .object({ draft: preparationSchema, begin: z.boolean() })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(createPreparedSession(store, body.draft, body.begin));
+  });
   app.post("/api/sessions", async (c) => {
     const { cardId, worldId, prepare } = z
       .object({
@@ -1065,6 +1127,7 @@ export function createApp(
       history.length === 0 ? "opening" : undefined,
     );
     const prompt = buildContext(runtimeCard, history, input, budget, reserve, {
+      promptModules: readPromptModules(store),
       player:
         session.options.player ??
         readPlayer(worldCard?.world.data) ??

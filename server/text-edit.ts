@@ -95,6 +95,7 @@ export function rewriteRequest(
     limits.reserve,
     {
       ...session.options,
+      promptModules: readPromptModules(store),
       player: session.options.player,
       worldDescription: [source.text, world?.data.description]
         .filter(Boolean)
@@ -121,3 +122,4 @@ export function rewriteRequest(
     config: { ...config, parameters },
   };
 }
+import { readPromptModules } from "./prompt-modules.js";

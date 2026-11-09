@@ -4,10 +4,14 @@ export function DeleteSaveDialog({
   name,
   onClose,
   onDelete,
+  kind = "存档",
+  description,
 }: {
   name: string;
   onClose: () => void;
   onDelete: () => Promise<void>;
+  kind?: "存档" | "世界";
+  description?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false),
@@ -25,9 +29,12 @@ export function DeleteSaveDialog({
         if (!busy) onClose();
       }}
     >
-      <h2 id="delete-save-title">删除存档「{name}」？</h2>
+      <h2 id="delete-save-title">
+        删除{kind}「{name}」？
+      </h2>
       <p>
-        将永久删除这份存档的剧情、修改历史和记忆，无法撤销。其他存档、角色卡、世界书和导入文档会保留。
+        {description ??
+          "将永久删除这份存档的剧情、修改历史和记忆，无法撤销。其他存档、角色卡、世界书和导入文档会保留。"}
       </p>
       {error && (
         <p className="error" role="alert">
@@ -36,7 +43,7 @@ export function DeleteSaveDialog({
       )}
       <div className="form-actions">
         <button autoFocus disabled={busy} onClick={onClose}>
-          保留存档
+          保留{kind}
         </button>
         <button
           className="danger-button"

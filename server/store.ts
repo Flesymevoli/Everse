@@ -9,6 +9,9 @@ export class Store {
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     this.db.exec(
+      "CREATE TABLE IF NOT EXISTS hidden_library_groups(key TEXT PRIMARY KEY)",
+    );
+    this.db.exec(
       "CREATE TABLE IF NOT EXISTS director_revisions(id INTEGER PRIMARY KEY,sessionId TEXT NOT NULL,body TEXT NOT NULL)",
     );
     this.db.exec(
@@ -129,10 +132,10 @@ export class Store {
     }
   }
   deleteSession(id: string) {
-    this.db.exec("BEGIN IMMEDIATE");
+    this.db.exec("SAVEPOINT delete_session");
     try {
       if (!this.db.prepare("SELECT id FROM sessions WHERE id=?").get(id)) {
-        this.db.exec("ROLLBACK");
+        this.db.exec("RELEASE delete_session");
         return false;
       }
       for (const table of [
@@ -148,10 +151,10 @@ export class Store {
       for (const table of ["preferences", "session_options", "sessions"]) {
         this.db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
       }
-      this.db.exec("COMMIT");
+      this.db.exec("RELEASE delete_session");
       return true;
     } catch (error) {
-      this.db.exec("ROLLBACK");
+      this.db.exec("ROLLBACK TO delete_session; RELEASE delete_session");
       throw error;
     }
   }

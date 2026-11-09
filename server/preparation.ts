@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import { parseSuggestions, suggestionInstruction } from "./suggestions.js";
 import { guideAnswers } from "../shared/opening-guide.js";
 import { directorInstruction } from "../shared/director.js";
+import { readPromptModules } from "./prompt-modules.js";
 export function guideSource(store: Store, d: Preparation) {
   const r = preparationResources(store, d);
   const source = sourceContext(
@@ -143,6 +144,26 @@ export function savePreparation(store: Store, id: string, raw: unknown) {
   });
   return d;
 }
+export function createPreparedSession(
+  store: Store,
+  raw: unknown,
+  begin: boolean,
+) {
+  const d = preparationSchema.parse(raw);
+  preparationResources(store, d);
+  sourceContext(store, d.source, d.opening);
+  store.db.exec("SAVEPOINT create_prepared");
+  try {
+    const id = store.create("", []);
+    savePreparation(store, id, d);
+    if (begin) confirmPreparation(store, id, d);
+    store.db.exec("RELEASE create_prepared");
+    return { id };
+  } catch (error) {
+    store.db.exec("ROLLBACK TO create_prepared; RELEASE create_prepared");
+    throw error;
+  }
+}
 export function confirmPreparation(store: Store, id: string, raw: unknown) {
   const s = ensurePreparation(store, id),
     d = preparationSchema.parse(raw);
@@ -173,7 +194,7 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
       /* Manual opening is valid without generated state. */
     }
   }
-  store.db.exec("BEGIN IMMEDIATE");
+  store.db.exec("SAVEPOINT confirm_preparation");
   try {
     const cardId = r.newCard
       ? store.addCard(r.newCard)
@@ -227,10 +248,12 @@ export function confirmPreparation(store: Store, id: string, raw: unknown) {
     // (including off) is retained. Existing saves are not migrated.
     if (!store.db.prepare("SELECT id FROM preferences WHERE id=?").get(id))
       store.setSuggestions(id, true);
-    store.db.exec("COMMIT");
+    store.db.exec("RELEASE confirm_preparation");
     return store.session(id);
   } catch (e) {
-    store.db.exec("ROLLBACK");
+    store.db.exec(
+      "ROLLBACK TO confirm_preparation; RELEASE confirm_preparation",
+    );
     throw e;
   }
 }
@@ -268,6 +291,7 @@ export function openingRequest(
     limits.reserve,
     {
       ...s.options,
+      promptModules: readPromptModules(store),
       automaticBudget: limits.automaticBudget,
       player: d.player,
       worldDescription: [

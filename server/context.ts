@@ -1,6 +1,10 @@
 import { expand as expandText, type Card } from "./cards.js";
 import { evaluateBook } from "./worldbook.js";
 import { presetSchema } from "./preset.js";
+import {
+  orderedModules,
+  type StoredPromptModule,
+} from "../shared/prompt-modules.js";
 export interface Message {
   settingOverride?: boolean;
   settingText?: string;
@@ -30,6 +34,7 @@ export function buildContext(
   budget = 8192,
   reserve = 1024,
   options: {
+    promptModules?: StoredPromptModule[];
     player?: import("../shared/player.js").Player;
     worldDescription?: string;
     cardWorldbook?: unknown;
@@ -47,6 +52,11 @@ export function buildContext(
   const expand = (text: string, name: string) =>
     expandText(text, name, options.player?.name);
   const data = card.data;
+  const modules = orderedModules(options.promptModules ?? []);
+  const moduleMessages = (position: "prefix" | "suffix"): Message[] =>
+    modules
+      .filter((m) => m.position === position)
+      .map((m) => ({ role: "system", content: expand(m.content, data.name) }));
   const world = options.worldbook
     ? evaluateBook(options.worldbook, history, input, options.scanDepth, {
         ...options,
@@ -113,7 +123,7 @@ export function buildContext(
   const preset = options.preset
     ? presetSchema.parse(options.preset)
     : undefined;
-  const assemble = (recent: Message[]): Message[] => {
+  const assembleCore = (recent: Message[]): Message[] => {
     const chat: Message[] = [...recent, { role: "user", content: input }];
     const injected: Message[] = [];
     for (let boundary = 0; boundary <= chat.length; boundary++) {
@@ -210,6 +220,11 @@ export function buildContext(
         content: expand(message.content, data.name),
       }));
   };
+  const assemble = (recent: Message[]): Message[] => [
+    ...moduleMessages("prefix"),
+    ...assembleCore(recent),
+    ...moduleMessages("suffix"),
+  ];
   const estimate = (messages: Message[]) =>
     messages.reduce((n, m) => n + Buffer.byteLength(m.content, "utf8") + 8, 0);
   // Unknown model capacity: this is a trimming target, never a claimed API limit.
@@ -227,6 +242,15 @@ export function buildContext(
     );
   return {
     messages,
+    activeModules: modules.map((m) => ({
+      id: m.id,
+      name: m.name,
+      kind: m.kind,
+      position: m.position,
+      priority: m.priority,
+      order: m.order,
+      content: expand(m.content, data.name),
+    })),
     estimatedTokens,
     budget,
     reserve,

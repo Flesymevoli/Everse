@@ -1,4 +1,5 @@
 import { requestJson as api, readJson, fetchLocal } from "./response";
+import { downloadLocalFile } from "./downloads";
 
 import { textDiff } from "./text-editing";
 import {
@@ -6,6 +7,7 @@ import {
   type PreparingSession,
 } from "./OpeningPreparation";
 import { readPlayer } from "../shared/player";
+import type { Preparation } from "../shared/preparation";
 import { Library, type WorldItem } from "./Library";
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -27,6 +29,7 @@ import {
   type Connection,
 } from "./connections";
 import { Management } from "./Management";
+import { PromptModules } from "./PromptModules";
 import { SaveSettings } from "./SaveSettings";
 import { TextEditor } from "./TextEditor";
 import type { TextSelection } from "../shared/text-edit";
@@ -66,12 +69,17 @@ function App() {
   const [loadedSession, setLoadedSession] = useState<PreparingSession | null>(
     null,
   );
+  const [pendingSession, setPendingSession] = useState<PreparingSession | null>(
+    null,
+  );
   const preparing =
-    !!loadedSession &&
-    (loadedSession.options.openingState === "preparing" ||
-      (loadedSession.options.openingState !== "started" &&
-        loadedSession.messages.length === 0));
+    !!pendingSession ||
+    (!!loadedSession &&
+      (loadedSession.options.openingState === "preparing" ||
+        (loadedSession.options.openingState !== "started" &&
+          loadedSession.messages.length === 0)));
   const [worlds, setWorlds] = useState<WorldItem[]>([]);
+  const [hiddenGroups, setHiddenGroups] = useState<string[]>([]);
   const [activeWorldId, setActiveWorldId] = useState<string | null>(null);
   const [works, setWorks] = useState<Work[]>([]),
     [saves, setSaves] = useState<Save[]>([]),
@@ -84,6 +92,17 @@ function App() {
     [error, setError] = useState(""),
     [prompt, setPrompt] = useState<unknown>(null);
   const [usage, setUsage] = useState<unknown>(null);
+  useEffect(() => {
+    const download = (event: MouseEvent) => {
+      const anchor = event.target instanceof Element ? event.target.closest("a") : null;
+      const path = anchor?.getAttribute("href");
+      if (!path?.startsWith("/api/") || !path.endsWith("/export")) return;
+      event.preventDefault();
+      void downloadLocalFile(path).catch(e => setError(e instanceof Error ? e.message : "导出失败"));
+    };
+    document.addEventListener("click", download, true);
+    return () => document.removeEventListener("click", download, true);
+  }, []);
   const readingScroll = useRef<HTMLDivElement>(null),
     followStory = useRef(true);
   useLayoutEffect(() => {
@@ -125,14 +144,16 @@ function App() {
     work?.card.data.name ||
     "我的故事";
   async function refresh() {
-    const [w, s, worlds] = await Promise.all([
+    const [w, s, worlds, hidden] = await Promise.all([
       api<Work[]>("cards"),
       api<Save[]>("sessions"),
       api<WorldItem[]>("worlds"),
+      api<string[]>("library/hidden"),
     ]);
     setWorlds(worlds);
     setWorks(w);
     setSaves(s);
+    setHiddenGroups(hidden);
   }
   useEffect(() => {
     void api<(Connection & { hasKey: boolean })[]>("connections")
@@ -151,6 +172,26 @@ function App() {
     void refresh().catch((e) => setError(String(e)));
   }, []);
   const loadVersion = useRef(0);
+  function beginPreparation(
+    cardId = "",
+    worldId = "",
+    source?: Preparation["source"],
+  ) {
+    ++loadVersion.current;
+    setPendingSession({
+      id: crypto.randomUUID(),
+      cardId,
+      messages: [],
+      options: {
+        openingState: "preparing",
+        ...(worldId ? { worldId } : {}),
+        storySource: source,
+      },
+    });
+    setSidebar(false);
+    setError("");
+    setTextEdit(null);
+  }
   async function load(id: string) {
     const version = ++loadVersion.current;
     let s: PreparingSession & { suggestions: boolean };
@@ -163,6 +204,7 @@ function App() {
       throw error;
     }
     if (version !== loadVersion.current) return;
+    setPendingSession(null);
     setLoadedSession(s);
     setTextEdit(null);
     setEditPreview(null);
@@ -300,22 +342,12 @@ function App() {
           </button>
         </div>
         <p className="eyebrow">YOUR LIBRARY</p>
-        <button
-          disabled={busy}
-          onClick={() =>
-            void action(async () => {
-              const created = await api<{ id: string }>("sessions", {
-                prepare: true,
-              });
-              await refresh();
-              await load(created.id);
-            })
-          }
-        >
+        <button disabled={busy} onClick={() => beginPreparation()}>
           <img className="figma-icon" src="/figma/plus.svg" alt="" /> 新建故事 /
           导入设定
         </button>
         <Library
+          hiddenGroups={hiddenGroups}
           characters={works}
           worlds={worlds}
           saves={saves}
@@ -350,19 +382,22 @@ function App() {
               setBusy(false);
             }
           }}
-          onStart={async (cardId, worldId) => {
-            setBusy(true);
-            try {
-              const save = await api<{ id: string }>("sessions", {
-                cardId,
-                prepare: true,
-                ...(worldId ? { worldId } : {}),
-              });
-              await refresh();
-              await load(save.id);
-            } finally {
-              setBusy(false);
+          onDeleteWorld={async (key, ids) => {
+            await api("library/delete", { key, ids, confirm: true });
+            if (ids.includes(session)) {
+              ++loadVersion.current;
+              setSession("");
+              setLoadedSession(null);
+              setMessages([]);
+              setInput("");
+              setDraft("");
+              setTextEdit(null);
             }
+            setPendingSession(null);
+            await refresh();
+          }}
+          onStart={async (cardId, worldId, source) => {
+            beginPreparation(cardId, worldId, source);
           }}
         />
         <div className="sidebar-footer">
@@ -488,10 +523,10 @@ function App() {
               )}
             </details>
           )}
-          {preparing && loadedSession ? (
+          {preparing && (pendingSession || loadedSession) ? (
             <OpeningPreparation
-              key={session}
-              session={loadedSession}
+              key={pendingSession?.id ?? session}
+              session={(pendingSession ?? loadedSession)!}
               characters={works}
               worlds={worlds}
               mock={false}
@@ -507,9 +542,31 @@ function App() {
                     : undefined,
                 })
               }
-              onStarted={async () => {
+              onCancel={() => {
+                if (pendingSession) setPendingSession(null);
+                else {
+                  setLoadedSession(null);
+                  setSession("");
+                  setMessages([]);
+                }
+              }}
+              onComplete={async (draft, begin) => {
+                let id = session;
+                if (pendingSession) {
+                  id = (
+                    await api<{ id: string }>("sessions/prepare", {
+                      draft,
+                      begin,
+                    })
+                  ).id;
+                } else {
+                  await api(
+                    `sessions/${session}/${begin ? "start" : "preparation"}`,
+                    draft,
+                  );
+                }
+                await load(id);
                 await refresh();
-                await load(session);
               }}
             />
           ) : (
@@ -894,6 +951,7 @@ function App() {
                 关闭
               </button>
             </div>
+            <PromptModules disabled={busy} />
             <ConnectionSettings
               onSave={(p) =>
                 void action(async () => {

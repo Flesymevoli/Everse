@@ -23,7 +23,8 @@ export function OpeningPreparation({
   characters,
   worlds,
   mock,
-  onStarted,
+  onComplete,
+  onCancel,
   onBusy,
   onClassify,
 }: {
@@ -31,7 +32,8 @@ export function OpeningPreparation({
   characters: { id: string; card: Card }[];
   worlds: WorldItem[];
   mock: boolean;
-  onStarted: () => Promise<void>;
+  onComplete: (draft: Preparation, begin: boolean) => Promise<void>;
+  onCancel: () => void;
   onBusy: (value: boolean) => void;
   onClassify: (documentId: string, revision: number) => Promise<unknown>;
 }) {
@@ -139,6 +141,9 @@ export function OpeningPreparation({
   return (
     <section className="settings opening-preparation" aria-label="开局准备">
       <h2>开局准备</h2>
+      <button type="button" disabled={working} onClick={onCancel}>
+        取消
+      </button>
       <p>
         填写或导入故事设定后即可进入。角色初始化按作品要求在正文中进行，直接用文字回复，不必先填角色表或生成开场预览。
       </p>
@@ -176,8 +181,7 @@ export function OpeningPreparation({
         onSubmit={(e) => {
           e.preventDefault();
           void run(async () => {
-            await api("sessions/" + session.id + "/start", draft);
-            await onStarted();
+            await onComplete(draft, true);
           });
         }}
       >
@@ -594,13 +598,15 @@ export function OpeningPreparation({
               type="button"
               onClick={() =>
                 void run(async () => {
-                  await api("sessions/" + session.id + "/preparation", draft);
-                  await onStarted();
+                  await onComplete(draft, false);
                   setNotice("准备内容已保存，下次打开存档可继续。");
                 })
               }
             >
               保存准备，稍后开始
+            </button>
+            <button type="button" onClick={onCancel}>
+              取消
             </button>
           </div>
           {error && (
