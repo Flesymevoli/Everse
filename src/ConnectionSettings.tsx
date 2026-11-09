@@ -1,19 +1,25 @@
 import type { Connections, Connection } from "./connections";
-import { removeConnection } from "./connections";
+
 export function ConnectionSettings({
   value,
   onChange,
   disabled,
+  onSave,
+  onDelete,
+  onClearKey,
 }: {
   value: Connections;
   onChange: (value: Connections) => void;
   disabled: boolean;
+  onSave: (profile: Connection) => void;
+  onDelete: (profile: Connection) => void;
+  onClearKey: (profile: Connection) => void;
 }) {
   function update(id: string, patch: Partial<Connection>) {
     onChange({
       ...value,
       profiles: value.profiles.map((p) =>
-        p.id === id ? { ...p, ...patch } : p,
+        p.id === id ? { ...p, ...patch, dirty: true } : p,
       ),
     });
   }
@@ -21,8 +27,9 @@ export function ConnectionSettings({
     <fieldset disabled={disabled} className="connection-settings">
       <h3>API 连接</h3>
       <p className="muted">
-        可添加多个服务或同一服务的不同模型。在主界面输入框旁选择使用哪个。名称、地址和模型保存在本浏览器；Key
-        仅在本页内存，刷新后需重填，并恢复模拟模式。
+        可添加多个服务或同一服务的不同模型。在主界面输入框旁选择使用哪个。点击保存后，连接及
+        Key 存入本机；Key 使用 Windows
+        当前用户加密，不回传浏览器。刷新后可直接选择已保存连接，无需重填 Key。
       </p>
       {!value.profiles.length && <p>还没有连接，可以先用免费模拟模型体验。</p>}
       {value.profiles.map((p, i) => (
@@ -38,7 +45,9 @@ export function ConnectionSettings({
                   name: "连接名称",
                   baseUrl: "Base URL（通常以 /v1 结尾）",
                   model: "模型 ID",
-                  apiKey: "API Key · 仅本页内存",
+                  apiKey: p.hasKey
+                    ? "API Key · 已加密保存（留空保留，输入可替换）"
+                    : "API Key",
                 }[field]
               }
               <input
@@ -58,7 +67,27 @@ export function ConnectionSettings({
               />
             </label>
           ))}
+          <p className="muted">
+            {p.saved
+              ? p.dirty
+                ? "有未保存修改"
+                : "已保存到本机"
+              : "尚未保存到本机"}
+          </p>
           <div className="connection-actions">
+            <button type="button" onClick={() => onSave(p)}>
+              保存连接与 Key
+            </button>
+            {p.hasKey && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm("删除此连接保存的 Key？")) onClearKey(p);
+                }}
+              >
+                删除已保存 Key
+              </button>
+            )}
             <button
               type="button"
               aria-pressed={value.selectedId === p.id}
@@ -74,7 +103,7 @@ export function ConnectionSettings({
                     `删除连接“${p.name || "未命名"}”？不会删除故事存档。`,
                   )
                 )
-                  onChange(removeConnection(value, p.id));
+                  onDelete(p);
               }}
             >
               删除连接

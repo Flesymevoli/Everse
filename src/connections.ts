@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { Config } from "../server/provider";
 export interface Connection {
+  saved?: boolean;
+  hasKey?: boolean;
+  dirty?: boolean;
   id: string;
   name: string;
   baseUrl: string;
@@ -79,6 +82,7 @@ export function resolveConnection(state: Connections): Config {
     };
   const p = state.profiles.find((p) => p.id === state.selectedId);
   if (!p) throw new Error("所选 API 连接不存在，请重新选择");
+  if (p.saved && p.dirty) throw new Error("连接已修改，请先保存再使用");
   if (!safeUrl(p.baseUrl.trim()))
     throw new Error(
       "请填写有效的 HTTP(S) Base URL，不要在地址中包含凭据或查询参数",

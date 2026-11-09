@@ -1,3 +1,4 @@
+import { Library, type WorldItem } from "./Library";
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Card } from "../server/cards";
@@ -13,13 +14,15 @@ import {
   restoreConnections,
   serializeConnections,
   resolveConnection,
+  removeConnection,
+  type Connection,
 } from "./connections";
 import { Management } from "./Management";
 type Work = { id: string; card: Card; warnings: string[] };
 type Save = {
   id: string;
   cardId: string;
-  options?: { name?: string; archived?: boolean };
+  options?: { name?: string; archived?: boolean; worldId?: string | null };
 };
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const r = await fetch(
@@ -44,6 +47,8 @@ function App() {
     [settings, setSettings] = useState(false),
     [suggestions, setSuggestions] = useState(false),
     [generating, setGenerating] = useState(false);
+  const [worlds, setWorlds] = useState<WorldItem[]>([]);
+  const [activeWorldId, setActiveWorldId] = useState<string | null>(null);
   const [works, setWorks] = useState<Work[]>([]),
     [saves, setSaves] = useState<Save[]>([]),
     [selected, setSelected] = useState(""),
@@ -74,21 +79,38 @@ function App() {
   const [budget, setBudget] = useState(8192),
     [reserve, setReserve] = useState(1024);
   const work = works.find((w) => w.id === selected);
+  const activeWorld = worlds.find((w) => w.id === activeWorldId);
   async function refresh() {
-    const [w, s] = await Promise.all([
+    const [w, s, worlds] = await Promise.all([
       api<Work[]>("cards"),
       api<Save[]>("sessions"),
+      api<WorldItem[]>("worlds"),
     ]);
+    setWorlds(worlds);
     setWorks(w);
     setSaves(s);
   }
   useEffect(() => {
+    void api<(Connection & { hasKey: boolean })[]>("connections")
+      .then((profiles) =>
+        setConnections((current) => ({
+          ...current,
+          profiles: [
+            ...profiles.map((p) => ({ ...p, apiKey: "" })),
+            ...current.profiles.filter(
+              (p) => !profiles.some((saved) => saved.id === p.id),
+            ),
+          ],
+        })),
+      )
+      .catch((e) => setError(String(e)));
     void refresh().catch((e) => setError(String(e)));
   }, []);
   async function load(id: string) {
     const s = await api<Save & { messages: Message[]; suggestions: boolean }>(
       "sessions/" + id,
     );
+    setActiveWorldId(s.options?.worldId ?? null);
     setSession(id);
     setSuggestions(s.suggestions);
     setSidebar(false);
@@ -117,7 +139,18 @@ function App() {
       const r = await fetch("/api/sessions/" + session + "/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, config, budget, reserve, mode }),
+        body: JSON.stringify({
+          input,
+          config,
+          budget,
+          reserve,
+          mode,
+          connectionId: connections.profiles.find(
+            (p) => p.id === connections.selectedId,
+          )?.saved
+            ? connections.selectedId
+            : undefined,
+        }),
       });
       if (!r.ok) {
         const e = await r.json();
@@ -163,7 +196,7 @@ function App() {
           ☰
         </button>
         <span className="brand">
-          Narrative <em>Slice</em>
+          Yuno<em>Tavern</em>
         </span>
         <span className="mode">
           {connections.selectedId === null ? "模拟模式" : "自有 API"}
@@ -186,94 +219,28 @@ function App() {
       )}
       <aside className="sidebar">
         <p className="eyebrow">你的故事书架</p>
-        <h2>作品</h2>
-        <label className="import">
-          ＋ 导入作品
-          <input
-            disabled={busy}
-            type="file"
-            accept=".json,.png,application/json,image/png"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file)
-                void action(async () => {
-                  if (file.size > 2000000) throw new Error("文件上限 2 MB");
-                  let result: Work;
-                  if (file.name.toLowerCase().endsWith(".png")) {
-                    const response = await fetch("/api/cards", {
-                      method: "POST",
-                      headers: { "Content-Type": "image/png" },
-                      body: file,
-                    });
-                    const data = await response.json();
-                    if (!response.ok)
-                      throw new Error(data.error ?? "PNG 导入失败");
-                    result = data as Work;
-                  } else
-                    result = await api<Work>(
-                      "cards",
-                      JSON.parse(await file.text()),
-                    );
-                  await refresh();
-                  setSelected(result.id);
-                  setSession("");
-                  setMessages([]);
-                  setDraft("");
-                  setSidebar(false);
-                });
-              e.target.value = "";
-            }}
-          />
-        </label>
-        {works.map((w) => (
-          <details className="work-group" key={w.id}>
-            <summary>
-              {w.card.data.name}
-              <span className="save-count">
-                {saves.filter((save) => save.cardId === w.id).length}
-              </span>
-            </summary>
-            <div className="work-saves">
-              {saves.map(
-                (save, i) =>
-                  save.cardId === w.id && (
-                    <button
-                      className="shelf-item"
-                      key={save.id}
-                      disabled={busy}
-                      aria-pressed={session === save.id}
-                      onClick={() => void action(() => load(save.id))}
-                    >
-                      {save.options?.name ??
-                        "存档 " + String(i + 1).padStart(2, "0")}
-                      {save.options?.archived ? " · 已归档" : ""}
-                    </button>
-                  ),
-              )}
-              {!saves.some((save) => save.cardId === w.id) && (
-                <p className="muted">还没有存档，开始第一段故事吧。</p>
-              )}
-              <button
-                className="text-button"
-                disabled={busy}
-                onClick={() =>
-                  void action(async () => {
-                    const save = await api<{ id: string }>("sessions", {
-                      cardId: w.id,
-                    });
-                    await refresh();
-                    await load(save.id);
-                  })
-                }
-              >
-                ＋ 新建存档
-              </button>
-            </div>
-          </details>
-        ))}
-        {!works.length && (
-          <p className="muted">导入一张 JSON 角色卡，让故事从这里开始。</p>
-        )}
+        <Library
+          characters={works}
+          worlds={worlds}
+          saves={saves}
+          session={session}
+          busy={busy}
+          onRefresh={refresh}
+          onLoad={(id) => void action(() => load(id))}
+          onStart={async (cardId, worldId) => {
+            setBusy(true);
+            try {
+              const save = await api<{ id: string }>("sessions", {
+                cardId,
+                ...(worldId ? { worldId } : {}),
+              });
+              await refresh();
+              await load(save.id);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
         <div className="sidebar-footer">
           <button onClick={() => setSettings(true)}>偏好与模型设置</button>
           <p>Spend tokens on storytelling.</p>
@@ -282,28 +249,16 @@ function App() {
       <main className="reader">
         <div className="book-heading">
           <p className="eyebrow">一部由你参与的小说</p>
-          <h1>{work?.card.data.name ?? "故事，等你翻开。"}</h1>
+          <h1>
+            {[activeWorld?.world.data.name, work?.card.data.name]
+              .filter(Boolean)
+              .join(" · ") || "故事，等你翻开。"}
+          </h1>
           <p className="subtitle">
             {session ? "慢慢读，随心继续。" : "选择作品，或导入你喜欢的角色。"}
           </p>
-          {work && (
-            <button
-              className="text-button"
-              disabled={busy}
-              onClick={() =>
-                void action(async () => {
-                  const save = await api<{ id: string }>("sessions", {
-                    cardId: selected,
-                  });
-                  await refresh();
-                  await load(save.id);
-                })
-              }
-            >
-              另起一段故事 ↗
-            </button>
-          )}
           {work &&
+            !activeWorldId &&
             session &&
             !busy &&
             messages.length <= 1 &&
@@ -538,6 +493,44 @@ function App() {
               </button>
             </div>
             <ConnectionSettings
+              onSave={(p) =>
+                void action(async () => {
+                  const saved = await api<Connection>("connections", {
+                    id: p.id,
+                    name: p.name,
+                    baseUrl: p.baseUrl.trim(),
+                    model: p.model,
+                    ...(p.apiKey ? { apiKey: p.apiKey } : {}),
+                  });
+                  setConnections((current) => ({
+                    ...current,
+                    profiles: current.profiles.map((item) =>
+                      item.id === p.id
+                        ? { ...saved, apiKey: "", dirty: false }
+                        : item,
+                    ),
+                  }));
+                })
+              }
+              onDelete={(p) =>
+                void action(async () => {
+                  if (p.saved) await api("connections/" + p.id + "/delete", {});
+                  setConnections((current) => removeConnection(current, p.id));
+                })
+              }
+              onClearKey={(p) =>
+                void action(async () => {
+                  await api("connections/" + p.id + "/clear-key", {});
+                  setConnections((current) => ({
+                    ...current,
+                    profiles: current.profiles.map((item) =>
+                      item.id === p.id
+                        ? { ...item, apiKey: "", hasKey: false }
+                        : item,
+                    ),
+                  }));
+                })
+              }
               value={connections}
               onChange={setConnections}
               disabled={busy}
@@ -612,7 +605,7 @@ function App() {
                   ))}
                 </details>
                 <p>
-                  角色卡和世界书编辑器尚待实现，可修改原 JSON 后导入为新作品。
+                  角色卡可在左侧角色卡列表中展开后编辑；世界书条目编辑器尚未实现。
                 </p>
                 <ul>
                   {work.warnings.map((warning, i) => (

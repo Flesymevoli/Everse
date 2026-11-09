@@ -70,3 +70,7 @@
 | 管理界面 | 扫描/递归/覆盖设置保存入口，阅读区候选入口 | 尚未完成浏览器点击验收，不将接口测试标为 UI 验收通过 |
 
 验证：npm run build 通过（含 tsc）；npm test 19/19 通过。tests/advanced-compat.test.ts 覆盖递归链/环、排除/阻断/延迟、概率、深度角色、覆盖与禁用、重生成保留原文、候选切换后上下文、JSONL 往返和失败不覆盖。tests/management.test.ts 覆盖本地真实 HTTP 请求参数与资源绑定、编辑撤销、分支、归档和 SQLite 重开。API Key 仍只保留页面内存。
+
+## YunoTavern 双卡与本地连接增量
+
+角色卡基础字段已支持新建/编辑（name/description/personality/scenario/first_mes），其他原始字段保留；并非完整角色编辑器。世界卡 yuno_world_v1 是应用自身资源，支持包装独立 ST 世界书导入，不是 ST 原生分类；ST 场景角色卡仍走角色卡入口。双卡存档与 Windows DPAPI 连接保存属于应用能力，不计入原生 ST 兼容进度。世界书跨书递归、世界卡专用预设 marker 尚未实现。tests/vault-worlds.test.ts 验证两类设定进入实际上下文、数据库重开、角色编辑和原文不变。

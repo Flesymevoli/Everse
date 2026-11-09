@@ -2,7 +2,7 @@
 
 TypeScript strict、React/Vite、Node 24/Hono、node:sqlite、Chat Completions。Node 自带 SQLite 避免额外原生编译。
 
-server/cards.ts 校验并保留卡片原始字段；context.ts 编排角色、关键词条目和近期完整对话；provider.ts 解析模型 SSE；store.ts 管理 SQLite；app.ts 处理 HTTP 与回合并发。浏览器只负责交互，密钥仅存页面内存。
+server/cards.ts 校验并保留卡片原始字段；context.ts 编排角色、关键词条目和近期完整对话；provider.ts 解析模型 SSE；store.ts 管理 SQLite；app.ts 处理 HTTP 与回合并发。浏览器只负责交互，未保存的密钥仅存页面内存；保存后由服务端使用 Windows DPAPI 加密落盘。
 
 角色卡存储 body 新增可选 original，保存未经运行时默认值处理的 JSON 对象；旧记录不重写。导出优先 original，旧卡回退 card。alternate_greetings 是可选字段，首轮前由 greeting 接口校验索引并保存实际开场消息；生成中和已有剧情时禁止替换。后续兼容阶段见 COMPATIBILITY.md。
 
@@ -27,4 +27,12 @@ shared/swipes.ts 统一候选选择。Message 可选 variants/selectedVariant �
 
 ## 多 API 连接
 
-src/connections.ts 校验恢复的连接元信息、按选中 ID 构建现有 Config，并显式白名单序列化名称/地址/模型到 localStorage。Key 仅在 App 状态中；恢复不读取 Key，也不恢复真实连接选择。ConnectionSettings.tsx 管理连接；ModelPicker.tsx 在阅读区切换。发送时固定捕获选中连接的配置，后端协议不变。tests/connections.test.ts 使用两个本地服务验证切换后的真实请求。
+src/connections.ts 校验恢复的连接元信息、按选中 ID 构建现有 Config，并显式白名单序列化名称/地址/模型到 localStorage。临时 Key 仅在 App 状态中；已保存连接从服务端恢复 hasKey 状态，不回传明文，也不恢复真实连接选择。ConnectionSettings.tsx 管理连接；ModelPicker.tsx 在阅读区切换。发送时固定捕获选中连接的配置，后端协议不变。tests/connections.test.ts 使用两个本地服务验证切换后的真实请求。
+
+## YunoTavern：密钥与双卡资源
+
+secrets.ts 通过 Windows PowerShell/.NET CurrentUser DPAPI 加解密，数据经标准输入而非命令行传递；不输出子进程错误详情。connection-vault.ts 管理 connections 表，只返回元信息；生成时凭 connectionId 读取可信地址与解密 Key，不接受客户端覆盖保存连接的地址。敏感写接口要求 JSON，所有请求限制 Host 和 Origin。无明文回退；其他平台暂不支持保存 Key。
+
+worlds.ts 定义 yuno_world_v1，assets 表以 worlds 类型保存规范化运行数据与原始 JSON。独立 ST 世界书可包装为世界卡；世界卡并不是 ST 新格式承诺。sessions 原 cardId 保留；纯世界会话使用空 cardId，session_options.worldId 指向世界。世界设定以独立系统消息进入上下文，世界书与手动绑定书各自求值（尚不跨书递归）。世界开场优先于角色开场。
+
+Library.tsx 负责世界/角色分类、新建、导入、角色编辑和开局选择。角色编辑只合并允许修改字段，保留原始高级字段，并在 card_revisions 事务备份；不修改聊天原文。旧记录不强制转换。项目包名改为 yunotavern，数据目录和 Git 远程地址保持不变。
