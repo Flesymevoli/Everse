@@ -53,7 +53,7 @@ shared/swipes.ts 统一候选选择。Message 可选 variants/selectedVariant �
 
 src/connections.ts 校验恢复的连接元信息、按选中 ID 构建现有 Config，并显式白名单序列化名称/地址/模型到 localStorage。临时 Key 仅在 App 状态中；已保存连接从服务端恢复 hasKey 状态，不回传明文，也不恢复真实连接选择。ConnectionSettings.tsx 管理连接；ModelPicker.tsx 在阅读区切换。发送时固定捕获选中连接的配置，后端协议不变。tests/connections.test.ts 使用两个本地服务验证切换后的真实请求。
 
-## YunoTavern：密钥与双卡资源
+## Everse：密钥与双卡资源
 
 secrets.ts 通过 Windows PowerShell/.NET CurrentUser DPAPI 加解密，数据经标准输入而非命令行传递；不输出子进程错误详情。connection-vault.ts 管理 connections 表，只返回元信息；生成时凭 connectionId 读取可信地址与解密 Key，不接受客户端覆盖保存连接的地址。敏感写接口要求 JSON，所有请求限制 Host 和 Origin。无明文回退；其他平台暂不支持保存 Key。
 
@@ -82,3 +82,9 @@ server/creation.ts 校验简单表单并映射到现有 V2 角色卡或 yuno_wor
 `server/opening-guide.ts` 使用一次文本生成整理作者开局问题，引用必须在所用资料中出现。答案写入准备草稿，确认后进入后续上下文；没有每答一题调用模型。当前不执行作者条件分支脚本，长文检索不能保证覆盖全部开局规则。
 
 新确认开局启用建议，保留已有显式偏好。开场建议从协议中解析，模型原始草稿保留；普通列表仅在 ReadingView 显示时识别，不更改历史文本。输入框独立于正文滚动区；跟随正文只在读者接近末尾时发生。
+
+## Alpha 发布行为更新
+
+安装入口 `start.cmd` 使用校验后的私有 Node，`scripts/launcher.mjs` 以锁文件和源码指纹控制安装/构建；普通运行由 server/index.ts 在同一回环端口服务 dist 与 API，开发模式仍分离。不改变默认 data 路径。
+
+完整模型正文与辅助状态校验解耦：parseNarrative 只对 StoryFormatError 降级，保存正文、原始输出和 warning，不采纳坏状态。API 失败、取消、截断、空正文以及事务错误不会伪装成功。Swipe 保留各候选警告。过期引导不阻断正文，当前设定优先。自然语言重要设定由玩家明确点击保存进入已有 director，不增加模型调用。后续边界见 AGENT-ALPHA.md。
