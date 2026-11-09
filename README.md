@@ -6,13 +6,19 @@
 
 当前优先保证自由叙事、玩家干预和持续游玩。Agent 引擎仍在迭代：尚无成熟的自主世界调度、通用 Skill/插件运行时，也未证明长篇成本优于直接聊天。
 
-## 让 AI 帮你安装
+## Windows 桌面版（普通玩家）
+
+使用 **Everse-0.1.0-Windows-x64-Setup.exe** 安装，随后双击桌面上的 Everse。页面、后端和 Node 运行时都包含在包内，不依赖 5173/5180、Vite、全局 Node/npm 或终端。用户数据保存在 `%APPDATA%\Everse\data`，独立于安装目录；更新与卸载默认不删除。当前安装包未签名、仅验收 Windows x64。
+
+维护者执行 `npm run pack:win` 后在 `release/` 取得安装包；也可手动运行 GitHub Actions 的 **Windows desktop package** 工作流下载构建产物。源码 ZIP 不是桌面安装包。构建、迁移、备份及验证边界见 [DESKTOP](docs/DESKTOP.md)。
+
+## 源码安装与开发（保留原方式）
 
 把下面这段话发给能操作本机文件和终端的 AI：
 
 > 请安装并启动 https://github.com/Flesymevoli/Everse 。先阅读 README.md、AGENTS.md 和 docs/INSTALL.md。在新的独立目录安装；Windows 执行 start.cmd，不要覆盖已有存档或修改全局 Node.js。先检查页面和本地存档，不要索取或调用我的真实 API Key。启动成功后告诉我本机地址和如何再次启动。
 
-Windows 10/11 x64 推荐方式：下载本仓库 ZIP，**解压到可写目录后双击 `start.cmd`**。或使用 Git：
+如果选择源码方式：下载本仓库 ZIP，**解压到可写目录后双击 `start.cmd`**。或使用 Git：
 
 ```powershell
 git clone https://github.com/Flesymevoli/Everse.git Everse
@@ -31,11 +37,11 @@ npm run setup
 npm start
 ```
 
-安装详解、无浏览器启动、端口、备份及更新见 [INSTALL](docs/INSTALL.md)。这是一键源码安装，尚无签名桌面安装包。
+源码安装详解、无浏览器启动、端口、备份及更新见 [INSTALL](docs/INSTALL.md)。源码启动需保留终端；桌面包不需要。
 
 ## 第一次游玩
 
-1. 点击“创建故事 / 导入设定”，填可选存档名和几句背景，或导入设定文件。
+1. 点击“创建故事 / 导入设定”，填可选存档名和几句背景，或导入设定文件。未确认时只在页面暂存；点击“取消”不会留下空存档。“保存准备，稍后开始”是主动保存。
 2. 点击“进入故事”，不需要填写开场或预览。角色卡自带开场会保留；没有开场也能进入。身份可以留空，按作品初始化要求在正文中直接回复。
 3. 直接输入，或点击“按设定开始”让 AI 引导；仅主动生成时调用 API，进入和刷新不会自动调用。生成前请添加并选中自己的模型。
 4. 设置里添加 API 地址、模型和 Key，点击“保存连接与 Key”，再从输入框旁选中该连接。Base URL 通常以 `/v1` 结尾，不包含 `/chat/completions`。
@@ -47,12 +53,15 @@ npm start
 
 ## 数据与 API Key
 
-- 数据：`data/game.sqlite`；停止应用后备份整个 `data/` 目录。重新安装和启动不删除存档。
+- 桌面数据：`%APPDATA%\Everse\data\game.sqlite`；源码数据仍为项目内 `data/game.sqlite`。停止应用后备份整个对应 `data/` 目录。不会自动合并两个目录。
 - Windows 保存 Key 使用当前用户 DPAPI 加密；列表不回传明文。可修改、删除，也可只在页面临时使用。跨 Windows 账号/机器迁移后可能需重新填写 Key。
 - 不要把 `data/`、`.runtime/`、`.env` 或 Key 上传 GitHub。服务只监听回环地址，没有公网多用户认证，**不要将它暴露到公网**。
 - 模型费用由所配置的服务商收取；软件本身免费。安装和自动测试不调用付费模型。
 
 ## 当前支持与边界
+
+- 全局常驻预设 / Mod 模块的新建、编辑、复制、删除、导入导出、开关、前后置词及排序；实际注入生成请求并计入预算，详见 [PROMPT-MODULES](docs/PROMPT-MODULES.md)。关键词、自定义插入位置、作品/存档作用范围仍待实现。
+- 世界分组的菜单可确认删除整个分组及其存档；共享创作资源保留在管理区，可再次使用。长设定在书架只显示摘要。
 
 - 角色卡 V2/V3 JSON、PNG；独立世界书关键词、递归、概率和深度插入；部分 Chat Completions 预设与模型参数。未知字段保留并提示，不宣称完整酒馆兼容。
 - 世界书/角色卡创建编辑，修改从下一轮生效；聊天 JSONL 导入导出。JSONL 不包含应用完整状态与文档，完整备份用 SQLite。

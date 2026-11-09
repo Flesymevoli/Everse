@@ -2,7 +2,7 @@
 
 ## 用户只要求安装或试玩时
 
-1. 阅读 README.md 和 docs/INSTALL.md。安装到用户指定或新建的独立目录；已有项目先检查，不覆盖或删除。
+1. 阅读 README.md、docs/DESKTOP.md 和 docs/INSTALL.md。普通玩家优先使用官方构建的 Windows 桌面安装包；源码 ZIP 不是安装包。核对来源和 SHA-256，不覆盖已有数据。下述 start.cmd 仅用于用户选择源码安装或开发的情况。
 2. Windows 运行 `start.cmd --setup-only` 完成准备，再运行 `start.cmd --no-browser` 启动并检查 `/api/health`；用户需要时打开输出地址。不要重复启动或擅自终止占用端口的进程。
 3. 脚本会下载经校验的私有 Node.js、执行 `npm ci` 和构建。不要安装全局 Node.js、pnpm 或修改系统 PATH/安全策略。网络/权限失败如实报告，不能关闭校验或换不明镜像。
 4. 首次验收只检查页面、手写开场及本地存档；生成测试使用隔离测试脚本中的假 API，应用界面不提供模拟模型。真实 API Key 由用户在 UI 输入，不要求粘贴进聊天、命令、代码或日志；真实调用需用户授权。

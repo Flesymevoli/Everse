@@ -1,6 +1,8 @@
 node_modules/
 .runtime/
 dist/
+.desktop/
+release/
 data/
 *.log
 .env*

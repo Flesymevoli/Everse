@@ -1,0 +1,37 @@
+appId: org.everse.desktop
+productName: Everse
+electronDist: node_modules/electron/dist
+directories:
+  app: .desktop/app
+  output: release
+files:
+  - main.cjs
+  - preload.cjs
+  - package.json
+  - LICENSE
+  - "!node_modules/**/*"
+asar: true
+npmRebuild: false
+extraResources:
+  - from: .desktop/backend
+    to: backend
+    filter: ["server.cjs", "dist/**/*", "THIRD-PARTY-NOTICES.txt"]
+  - from: .desktop/runtime
+    to: runtime
+    filter: ["node.exe", "LICENSE"]
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Everse-${version}-Windows-${arch}-Setup.${ext}
+  signExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Everse
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false

@@ -1,5 +1,11 @@
 # 架构
 
+桌面封装：Electron 主进程管理随包 Node 后端，复用原 Hono/SQLite；前端加载构建产物，稳定内部来源转发到带私有令牌的回环动态端口。数据位于用户 AppData，源码开发模式不变，详见 DESKTOP.md。
+
+提示词模块复用 assets 的独立 kind，先支持全局常驻前后置；`context.ts` 统一排列并纳入预算，Inspector 可见实际内容。不混入世界书、动态记忆或 Skill；酒馆原预设保持独立导入和顺序，详见 PROMPT-MODULES.md。
+
+新建准备先留在前端，确认时 `/api/sessions/prepare` 通过嵌套保存点原子创建；失败不留下空存档。世界删除重新计算服务器分组并校验用户确认的存档集合，事务删除相关存档，隐藏空分组但保留共享创作资源。
+
 分类首版：`document_plans` 按原文 hash 保存分析单元、类别、来源（模型/人工）及 revision。`document-plan.ts` 执行一次有界分类请求与校验；`document-context.ts` 区分持续规则、开局指令、按需资料及默认排除的示例。未实现完整语义分段，范围与批次费用见 IMPORT-CLASSIFICATION.md。当前单服务进程内锁，版本冲突拒绝覆盖。
 
 开场恢复：`recoverOpening` 只读本地生成结果并更新准备草稿，不调用模型、不直接提交剧情。引用排版归一化后必须映射回原文；无效状态不随手动恢复正文提交。

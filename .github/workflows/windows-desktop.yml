@@ -1,0 +1,28 @@
+name: Windows desktop package
+on: [workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.20.0'
+          cache: npm
+      - run: npm ci
+      - run: node node_modules/electron/install.js
+      - run: npm test
+      - run: npm run pack:win
+      - run: npm run test:desktop
+      - name: Checksums
+        shell: pwsh
+        run: Get-FileHash release/*-Setup.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } | Set-Content release/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Everse-Windows-x64
+          path: |
+            release/*-Setup.exe
+            release/SHA256SUMS.txt
+            release/qa/*.png
