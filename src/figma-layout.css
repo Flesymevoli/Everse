@@ -156,9 +156,9 @@ html {
   width: 34px;
   height: 42px;
   flex: none;
-  background: var(--sage-soft);
+  background: #e3d9cc;
   border-radius: 6px;
-  color: var(--sage);
+  color: #6b5545;
   font-family: var(--font-app);
 }
 .story-cover.small {
@@ -202,8 +202,8 @@ html {
   padding: 6px 8px;
 }
 .tree-saves .shelf-item[aria-pressed="true"] {
-  background: var(--sage-soft);
-  color: var(--sage);
+  background: var(--selection);
+  color: var(--ink);
   box-shadow: inset 3px 0 var(--sage);
 }
 .tree-action {
@@ -298,8 +298,8 @@ html {
 /* Sage identifies the story and its state; terracotta remains the writing accent. */
 .recent-story:hover { background: var(--selection); }
 .story-tree-group > summary:hover { background: #ebe7df; border-radius: 8px; }
-.story-tree-group[open] > summary { color: var(--sage); }
-.tree-saves .shelf-item[aria-pressed="true"]:hover { background: var(--sage-hover); }
+.story-tree-group[open] > summary { color: var(--ink); }
+.tree-saves .shelf-item[aria-pressed="true"]:hover { background: #e3d9cc; }
 .story-panel .panel-heading .eyebrow, .dynamic-character h2 { color: var(--sage); }
 .story-monogram { background: var(--sage-soft); color: var(--sage); }
 .story-panel > button[role="switch"][aria-checked="true"] { background: var(--sage-soft); color: var(--sage); }
